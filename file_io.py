@@ -12,7 +12,9 @@ IMAGES_DIR = os.getcwd() + '/images/'
 
 def make_directories():
     """
-    Create the necessary directories.
+    Create the necessary directories for storing the FITS files,
+    the lightcurve CSVs, and the images. The created directories
+    are: ./fits, ./lightcurves, and ./images.
     """
 
     dirs = [FITS_DIR, LIGHTCURVES_DIR, IMAGES_DIR]
@@ -23,6 +25,30 @@ def make_directories():
 
 
 def get_fits_files(start_time, end_time, wavelengths, b_save_files=True, b_show_progress=False):
+    """
+    Use Fido to get the FITS files for the specified time interval and wavelength.
+    This method may take considerable time to run because it uses Fido.
+
+    Parameters
+    ----------
+    start_time : str
+        The start time of the observation. Formatted as
+        '%Y-%m-%dT%H:%M:%S.%f'.
+    end_time : str
+        The end time of the observation. Formatted as
+        '%Y-%m-%dT%H:%M:%S.%f'.
+    wavelength : list on int
+        The wavelengths of interest.
+    b_save_file : bool
+        Specify whether to save the downloaded image data.
+    b_show_progress : bool
+        Specify whether to show the download progress.
+    
+    Returns
+    -------
+    files : list of str
+        A list containing all of the downloaded file paths.
+    """
 
     if not isinstance(wavelengths, list):
         wavelengths = [wavelengths]
@@ -43,11 +69,26 @@ def get_fits_files(start_time, end_time, wavelengths, b_save_files=True, b_show_
     return files
 
 
-def read_lightcurves(save_dir):
+def read_lightcurves(save_path):
+    """
+    Read lightcurve data from the specified CSV file.
 
-    print('Reading lightcurve data from \'' + save_dir + '\'')
+    Parameters
+    ----------
+    save_path : str
+        Path to the input CSV file.
+    
+    Returns
+    -------
+    lightcurve : tuple
+        Contains the data from the input file.
+        In the format (times, data) where times
+        and data are both np.ndarray.
+    """
 
-    dat = np.genfromtxt(save_dir, delimiter=',',
+    print('Reading lightcurve data from \'' + save_path + '\'')
+
+    dat = np.genfromtxt(save_path, delimiter=',',
         # dtype=[('time', np.dtype('U100')), ('lc', np.float64), ('lc_bc', np.float64), ('lc_de', np.float64)])
         dtype=[('time', np.float64), ('lc', np.float64)])
 
@@ -58,16 +99,25 @@ def read_lightcurves(save_dir):
     return lightcurve #, lightcurve_bc, lightcurve_detrended
 
 
-def save_lightcurves(arrays, save_dir):
+def save_lightcurves(arrays, save_path):
     """
-    arrays : tuple of np.ndarrays
+    Save lightcurve data to the specified CSV file.
+
+    Parameters
+    ----------
+    arrays : tuple
+        Contains the data to save to the file.
+        In the format (times, data) where times
+        and data are both np.ndarray.
+    save_path : str
+        Path to the input CSV file.
     """
 
-    print('Saving lightcurve data to \'' + save_dir + '\'')
+    print('Saving lightcurve data to \'' + save_path + '\'')
     a = np.vstack(arrays).T
     try:
-        np.savetxt(save_dir, a, delimiter=',', fmt='%s')#, '%.18e', '%.18e', '%.18e'])
+        np.savetxt(save_path, a, delimiter=',', fmt='%s')#, '%.18e', '%.18e', '%.18e'])
     except Exception as e:
         print('Exception while saving lightcurves to file.')
         print(e)
-        os.remove(save_dir)
+        os.remove(save_path)

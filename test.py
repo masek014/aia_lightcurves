@@ -4,6 +4,15 @@ from plotting import process_observation
 
 
 def test_observation():
+    """
+    A test observation. Use this to make sure
+    everything is working properly
+
+    Returns
+    -------
+    d : dict
+        Dictionary containing the processed information.
+    """
 
     test_obs = {
         'start_time': '2018-09-09T12:00:00.0',

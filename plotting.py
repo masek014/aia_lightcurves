@@ -49,8 +49,8 @@ def get_map(aia_wavelength, current_date):
     aia_wavelength : int
         The desired AIA wavelength.
     current_date : str
-        Date and time of desired image in the format
-        specified by DATETIME_FORMAT.
+        Date and time of desired image formatted as
+        '%Y-%m-%dT%H:%M:%S.%f'.
 
     Returns
     -------
@@ -178,8 +178,25 @@ def make_submap(obs_map, center, radius):
 
 def add_region(map_obj, ax, center, radius, **kwargs):
     """
-    Adds a region to the provided axes.
-    Center (SkyCoord) and radius in arcsecond.
+    Adds a circular region to the provided axes.
+    
+    Parameters
+    ----------
+    map_obj : Sunpy map
+        The input map that the region is based on.
+    ax : matplotlib axes object
+        The axes on which the region will be drawn.
+    center : tuple
+        Coordinates for the region center, (x,y), in arcseconds.
+    radius : float
+        The radius of the circular region.
+    **kwargs : dict
+        Style parameters of the plotted lightcurve.
+
+    Returns
+    -------
+    reg : CircleSkyRegion
+        Region object for the specified area.
     """
 
     defaultKwargs = {'color': 'red', 'linestyle': 'dashed', 'linewidth': 1}
@@ -194,6 +211,26 @@ def add_region(map_obj, ax, center, radius, **kwargs):
 
 
 def get_subregion(map_obj, center, radius):
+    """
+    Obtain the bottom left and top right coordinates of the subregion
+    specified by the provided coordinates.
+
+    Parameters
+    ----------
+    map_obj : Sunpy map
+        The input map that the region is based on.
+    center : tuple
+        Coordinates for the region center, (x,y), in arcseconds.
+    radius : float
+        The radius of the circular region.
+    
+    Returns
+    -------
+    bl : SkyCoord
+        The bottom left point of the subregion.
+    tr : SkyCoord
+        The top right point of the subregion.
+    """
 
     bl_x, bl_y = center[0] - radius, center[1] - radius
     bl = SkyCoord(bl_x*u.arcsecond, bl_y*u.arcsecond, frame=map_obj.coordinate_frame)
@@ -206,8 +243,32 @@ def get_subregion(map_obj, center, radius):
 
 def make_lightcurve(start_time, end_time, wavelength, center, radius):
     """
-    center is a tuple of the form (center_x, center_y) in arcseconds.
-    radius is in arcseconds.
+    Obtain the lightcurve data for the specified parameters
+    for the given region. Currently, the intensities are
+    **not** normalized in any way. The units/scale is
+    arbitrary.
+
+    Parameters
+    ----------
+    start_time : str
+        The start time of the observation. Formatted as
+        '%Y-%m-%dT%H:%M:%S.%f'.
+    end_time : str
+        The end time of the observation. Formatted as
+        '%Y-%m-%dT%H:%M:%S.%f'.
+    wavelength : int
+        The wavelength of interest.
+    center : tuple
+        Coordinates for the region center, (x,y), in arcseconds.
+    radius : float
+        The radius of the circular region.
+
+    Returns
+    -------
+    times : list
+        The times for each data point.
+    intensities : list
+        The lightcurve values at each time.
     """
 
     print('Generating light curve data.')
@@ -291,6 +352,34 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
 
 
 def process_observation(obs):
+    """
+    This method compiles all functionality into one location to take
+    advantage of all of the custom methods in this package.
+
+    Example of an observation dictionary:
+    obs = {
+        'start_time': '2019-04-03T17:40:00.0', # The observation start time
+        'end_time': '2019-04-03T17:55:00.0',   # The observation end time
+        'map_time': '2019-04-03T18:00:33.0',   # The time used for plotting the maps
+        'wavelengths': [171],                  # The wavelengths to examine
+        'center': (-220, 330),                 # The center of the region of interest (arcseconds)
+        'radius': 50,                          # The radius of the region of interest (arcseconds)
+        'N': 21,                               # The boxcar width
+        'name': 'reg1'                         # The region name to delineate files
+    }
+
+    Parameters
+    ----------
+    obs : dict
+        A dictionary containing all of the observation information.
+    
+    Returns
+    -------
+    dicts : list of dicts
+        Each dict in the list contains processed data for each
+        wavelength examined in the observation.
+        ex: {'obs_map': obs_map, 'obs_submap': obs_submap, 'lightcurve': lightcurve, 'fig': fig}
+    """
 
     file_io.make_directories()
     lightcurves_dir, images_dir = file_io.LIGHTCURVES_DIR, file_io.IMAGES_DIR
