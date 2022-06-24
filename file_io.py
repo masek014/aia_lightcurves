@@ -1,13 +1,18 @@
 import os
+import sys
+import multiprocessing
 import numpy as np
 import astropy.units as u
 
+from datetime import datetime, timedelta
 from sunpy.net import Fido, attrs as a
 
 
 FITS_DIR = os.getcwd() + '/fits/'
 LIGHTCURVES_DIR = os.getcwd() + '/lightcurves/'
 IMAGES_DIR = os.getcwd() + '/images/'
+TIME_STR_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
+sys.path.append(os.getcwd())
 
 
 def make_directories():
@@ -22,6 +27,43 @@ def make_directories():
     for d in dirs:
         if not os.path.isdir(d):
             os.mkdir(d)
+
+
+def get_fits_files_parallel(start_time, end_time, wavelengths, b_save_files=True, b_show_progress=False):
+
+    # Divide up the start and end time into 10 second segments.
+    start_dt = datetime.strptime(start_time, TIME_STR_FORMAT)
+    end_dt = datetime.strptime(end_time, TIME_STR_FORMAT)
+    cur_time = start_dt
+    times_list = [] # List of time strings for Fido.
+    while cur_time < end_dt:
+        cur_timestr = datetime.strftime(cur_time, TIME_STR_FORMAT)
+        times_list.append(cur_timestr)
+        cur_time = cur_time + timedelta(seconds=10)
+    times_list.append(end_time)
+    
+    files = []
+    pool = multiprocessing.Pool(processes=4)
+    jobs = []
+    for i in range(len(times_list)-1):
+        # Parallelize here.
+        # f = lambda : files.append(get_fits_files(times_list[i], times_list[i+1], wavelengths, b_save_files, b_show_progress))
+        p = multiprocessing.Process(target=get_fits_files,
+            args=(times_list[i], times_list[i+1], wavelengths, b_save_files, b_show_progress))
+        jobs.append(p)
+        p.start()
+
+    for job in jobs:
+        job.join()
+    pool.close()
+    pool.join()
+
+    import glob
+    files_dir = FITS_DIR + start_time.split('T')[0].replace('-', '') + '/'
+    files = glob.glob(files_dir + '*')
+    files.sort()
+
+    return files
 
 
 def get_fits_files(start_time, end_time, wavelengths, b_save_files=True, b_show_progress=False):
@@ -57,7 +99,7 @@ def get_fits_files(start_time, end_time, wavelengths, b_save_files=True, b_show_
     for wavelength in wavelengths:
         result = Fido.search(a.Time(start_time, end_time), 
                             a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), 
-                            a.vso.Sample(12 * u.second))
+                            a.Sample(12 * u.second))
         if b_save_files:
             for res in result[0]:
                 date = res[0].value.split(' ')[0].replace('-', '')
@@ -65,6 +107,9 @@ def get_fits_files(start_time, end_time, wavelengths, b_save_files=True, b_show_
                 files += Fido.fetch(res, site='ROB', path=path, progress=b_show_progress)
         else:
             files += Fido.fetch(result, site='ROB', progress=b_show_progress)
+
+    # Retry downloading any failed files.
+    files = Fido.fetch(files) # TODO: Determine if we want this or not
 
     return files
 

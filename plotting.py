@@ -39,7 +39,7 @@ def add_minor_ticks(ax):
     ax.tick_params(which='minor', length=1.5)
 
 
-def get_map(aia_wavelength, current_date):
+def get_map(aia_wavelength, map_time):
     """
     Query and return the most recent AIA
     image that Sunpy.Fido can get.
@@ -48,7 +48,7 @@ def get_map(aia_wavelength, current_date):
     ----------
     aia_wavelength : int
         The desired AIA wavelength.
-    current_date : str
+    map_time : str
         Date and time of desired image formatted as
         '%Y-%m-%dT%H:%M:%S.%f'.
 
@@ -62,15 +62,15 @@ def get_map(aia_wavelength, current_date):
     info = (a.Instrument('aia') & a.Wavelength(aia_wavelength*u.angstrom))
     look_back = {'minutes': 30}
     
-    # if current_date is None:
+    # if map_time is None:
     #     current = convert.datetime.now()
-    #     current_date = current.strftime(DATETIME_FORMAT)
-    current = convert.datetime.strptime(current_date, DATETIME_FORMAT)
+    #     map_time = current.strftime(DATETIME_FORMAT)
+    map_dt = convert.datetime.strptime(map_time, DATETIME_FORMAT)
 
-    past = current-convert.timedelta(**look_back)
+    past = map_dt - convert.timedelta(**look_back)
     past_date = past.strftime(DATETIME_FORMAT)
     startt = str(past_date)
-    endt = str(current_date)
+    endt = str(map_time)
 
     result = file_io.Fido.search(a.Time(startt, endt), info)
     file_download = file_io.Fido.fetch(result[0, -1], site='ROB', progress=False)
@@ -151,7 +151,7 @@ def make_submap(obs_map, center, radius):
     """
     Creates a submap around the provided circular region based on obs_map.
     Center is a tuple of (x,y), in arcseconds
-    radius is the radius in arcseconds
+    radius is the radius in arcseconds.
 
     Parameters
     ----------
@@ -159,7 +159,7 @@ def make_submap(obs_map, center, radius):
         The original map that the submap will be beased on.
     center : tuple
         The center point coordinates of the circular region.
-        In units of arcseconds
+        In units of arcseconds.
     radius : float
         The radius of the circular region.
         In units of arcseconds.
@@ -286,7 +286,7 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
         # There is some inherent uncertainty in the next line
         # when indexing the subm.data since the shape may slightly differ.
-        intensities.append(utils.np.sum(subm.data[0:mask.data.shape[0], 0:mask.data.shape[0]][mask.data!=0]))
+        intensities.append(utils.np.sum(subm.data[0:mask.data.shape[0], 0:mask.data.shape[1]][mask.data!=0])) # TODO: determine shape index of second dimension
 
     return times, intensities
 
@@ -390,9 +390,12 @@ def process_observation(obs):
     dicts = []
 
     for wavelength in obs['wavelengths']:
-                
+        
+        print('Processing data for wavelength ' + str(wavelength))
+
         # Adjust the value of the boxcar width to accommodate the available data points.
-        r = file_io.Fido.search(a.Time(obs['start_time'], obs['end_time']), a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), a.vso.Sample(12 * u.second))
+        r = file_io.Fido.search(a.Time(obs['start_time'], obs['end_time']),
+            a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), a.Sample(12 * u.second))
         obs['N'] = utils.adjust_n(len(r[0]), obs['N'])
 
         fig = plt.figure(figsize=(10, 7))
