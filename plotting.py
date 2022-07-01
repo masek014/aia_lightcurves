@@ -20,6 +20,7 @@ plt.rcParams['font.size'] = 8
 
 MAP_X_LABEL = 'X (arcseconds)'
 MAP_Y_LABEL = 'Y (arcseconds)'
+COLORMAP = {94:'red', 131:'red', 171:'cyan', 193:'cyan', 211:'cyan', 304:'cyan', 335:'red', 1600:'red', 1700:'cyan'}
 
 
 def add_minor_ticks(ax):
@@ -246,7 +247,9 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
     Obtain the lightcurve data for the specified parameters
     for the given region. Currently, the intensities are
     **not** normalized in any way. The units/scale is
-    arbitrary.
+    arbitrary. There is a built-in procedure in the event
+    that a FITS file is corrupted. It will delete the
+    corrupted file and attempt to redownload it.
 
     Parameters
     ----------
@@ -273,11 +276,27 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
     print('Generating light curve data.')
 
-    files = file_io.get_fits_files(start_time, end_time, wavelength, True)
+    files = file_io.get_fits_files(start_time, end_time, wavelength)
     times, intensities = [], []
-    for f in files:
 
-        m = sunpy.map.Map(f)
+    # Download the files and handle potential file corruption.
+    # Redownload the file if it is corrupted.
+    for f in files:
+        attempt_number = 1
+        while attempt_number <= file_io.MAX_DOWNLOAD_ATTEMPTS:
+            try:
+                m = sunpy.map.Map(f)
+                break
+            except IOError as e: # File corruption, attempt redownload.
+                print(e)
+                print(f'FITS read error on attempt {attempt_number}. Deleting file and retrying download.')
+                f = file_io.redownload_file(f)
+                continue
+        # This is only True if the except block is executed for all attempts.
+        if attempt_number > file_io.MAX_DOWNLOAD_ATTEMPTS:
+            print('Exceeded maximum number of attempts. Exitting.')
+            file_io.sys.exit(1)
+
         bl, tr = get_subregion(m, center, radius)
         subm = m.submap(bottom_left=bl, top_right=tr)
         reg = CircleSkyRegion(SkyCoord(*center, unit='arcsecond', frame=subm.coordinate_frame), radius*u.arcsecond)
@@ -286,7 +305,8 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
         # There is some inherent uncertainty in the next line
         # when indexing the subm.data since the shape may slightly differ.
-        intensities.append(utils.np.sum(subm.data[0:mask.data.shape[0], 0:mask.data.shape[1]][mask.data!=0])) # TODO: determine shape index of second dimension
+        # TODO: determine shape index of second dimension
+        intensities.append(utils.np.sum(subm.data[0:mask.data.shape[0], 0:mask.data.shape[1]][mask.data!=0]))
 
     return times, intensities
 
@@ -381,8 +401,12 @@ def process_observation(obs):
         ex: {'obs_map': obs_map, 'obs_submap': obs_submap, 'lightcurve': lightcurve, 'fig': fig}
     """
 
-    file_io.make_directories()
-    lightcurves_dir, images_dir = file_io.LIGHTCURVES_DIR, file_io.IMAGES_DIR
+    start_date = obs['start_time'].split('T')[0].replace('-', '')
+    end_date = obs['end_time'].split('T')[0].replace('-', '')
+    file_io.make_directories(start_date)
+    file_io.make_directories(end_date)
+    lightcurves_dir = file_io.LIGHTCURVES_DIR_FORMAT.format(date=start_date)
+    images_dir = file_io.IMAGES_DIR_FORMAT.format(date=start_date)
     print('Generating plots for ' + str(obs['start_time']).replace('T', ' ') + ' through ' + str(obs['end_time']).replace('T', ' '))
     
     startt = obs['start_time'].replace('-','')  .replace(':','')
@@ -408,14 +432,16 @@ def process_observation(obs):
         obs_map = get_map(wavelength, obs['map_time'])
         map_ax = fig.add_subplot(gs_maps[0,0], projection=obs_map)
         fig, map_ax = plot_map(obs_map, fig, map_ax, title='Full disk')
-        reg = add_region(obs_map, map_ax, obs['center'], obs['radius'], label='Region')
+        reg = add_region(obs_map, map_ax, obs['center'], obs['radius'],
+            label='Region', color=COLORMAP[wavelength])
 
         # Make the submap around the region of interest.
         obs_submap = make_submap(obs_map, obs['center'], obs['radius'])
         submap_ax = fig.add_subplot(gs_maps[0,1], projection=obs_submap)
         fig, submap_ax = plot_map(obs_submap, fig, submap_ax,
             title='Selected region: ' + str(obs['center']) + ', r=' + str(obs['radius']))
-        submap_reg = add_region(obs_submap, submap_ax, obs['center'], obs['radius'], alpha=0.5, label='Region')
+        submap_reg = add_region(obs_submap, submap_ax, obs['center'], obs['radius'],
+            alpha=0.5, label='Region', color=COLORMAP[wavelength])
         
         csv_file = lightcurves_dir + 'lc_' + startt + '-' + endt + '_' + str(wavelength)  + '_N' + str(obs['N']) + '_' + obs['name'] + '.csv'
         if file_io.os.path.exists(csv_file):
