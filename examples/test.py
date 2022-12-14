@@ -1,6 +1,7 @@
 #!/bin/python3
 
-from plotting import process_observation
+# from plotting import process_observation
+from aia_lightcurves import plotting
 
 
 def test_observation():
@@ -25,7 +26,7 @@ def test_observation():
         'name': 'test'
     }
 
-    d = process_observation(test_obs)
+    d = plotting.process_observation(test_obs)
 
     return d
 

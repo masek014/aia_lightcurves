@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 
 
-DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S.%f'
+DATETIME_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 
 def str_to_epoch(s):
@@ -21,7 +21,7 @@ def str_to_epoch(s):
     to the provided string.
     """
     
-    dt = datetime.strptime(s, DATETIME_FORMAT).replace(tzinfo=timezone.utc)
+    dt = datetime.strptime(s, DATETIME_FORMAT+'%.f').replace(tzinfo=timezone.utc)
     
     return datetime_to_epoch(dt)
 

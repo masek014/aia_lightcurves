@@ -1,26 +1,26 @@
-import utils
-import convert
-import file_io
-
 import sunpy.map
 import astropy.units as u
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 
+from sunpy.net import attrs as a
 from astropy.coordinates import SkyCoord
 from regions import CircleSkyRegion
 
-from sunpy.net import attrs as a
+from . import convert, file_io, utils
+np = utils.np
 
-
-plt.rcParams['font.family'] = 'Helvetica'
 plt.rcParams['font.size'] = 8
 
 
 MAP_X_LABEL = 'X (arcseconds)'
 MAP_Y_LABEL = 'Y (arcseconds)'
-COLORMAP = {94:'red', 131:'red', 171:'cyan', 193:'cyan', 211:'cyan', 304:'cyan', 335:'red', 1600:'red', 1700:'cyan'}
+COLORMAP = {
+    94:'red', 131:'red', 171:'cyan', 193:'cyan', 211:'cyan',
+    304:'cyan', 335:'red', 1600:'red', 1700:'cyan'
+}
 
 
 def add_minor_ticks(ax):
@@ -38,6 +38,45 @@ def add_minor_ticks(ax):
     (ax.coords[1]).display_minor_ticks(True)
     (ax.coords[1]).set_minor_frequency(5)
     ax.tick_params(which='minor', length=1.5)
+
+
+def apply_colorbar(fig, ax, width=0.005, **kwargs):
+    """
+    Adds a colorbar to the map plot.
+    A new axes object is created to house the colorbar.
+    Parameters
+    ----------
+    fig : matplotlib figure
+        The figure to which to colorbar will be added.
+    ax : matplotlib axes
+        The axes to which the colorbar is applied.
+    width : float
+        The colorbar width as a fraction of the plot width.
+    kwargs : dict
+        Keyword arguments to the ColorbarBase method.
+    Returns
+    -------
+    cbax : matplotlib axes
+        The axes containing the colorbar.
+    cb : matplotlib colorbar
+        The newly created colorbar.
+    """
+
+    default_kwargs = {
+        'spacing': 'uniform'
+    }
+    kwargs = {**default_kwargs, **kwargs}
+
+    # Create a custom colorbar.
+    # https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
+    cbax = fig.add_axes([
+        ax.get_position().x1+0.005, # Set spacing between the plot and cb
+        ax.get_position().y0, # Set bottom of cb to bottom of the plot
+        width, # Set the width of the cb as a fraction of the plot width
+        ax.get_position().height]) # Set the height of cb to the plot height
+    cb = matplotlib.colorbar.ColorbarBase(cbax, **kwargs)
+
+    return cbax, cb
 
 
 def get_map(aia_wavelength, map_time):
@@ -63,11 +102,7 @@ def get_map(aia_wavelength, map_time):
     info = (a.Instrument('aia') & a.Wavelength(aia_wavelength*u.angstrom))
     look_back = {'minutes': 30}
     
-    # if map_time is None:
-    #     current = convert.datetime.now()
-    #     map_time = current.strftime(DATETIME_FORMAT)
     map_dt = convert.datetime.strptime(map_time, DATETIME_FORMAT)
-
     past = map_dt - convert.timedelta(**look_back)
     past_date = past.strftime(DATETIME_FORMAT)
     startt = str(past_date)
@@ -104,7 +139,7 @@ def get_brightest_skycoord(map_obj):
     return max_coords
 
 
-def plot_map(map_obj, fig=None, ax=None, title=''):
+def plot_map(map_obj, fig=None, ax=None, title='', **cb_kwargs):
     """
     Plot the provided Sunpy map.
     If fig and ax are provided, the map will be added to them.
@@ -133,17 +168,25 @@ def plot_map(map_obj, fig=None, ax=None, title=''):
         or the updated axes object if it was provided.
     """
 
+    defaultKwargs = {
+        'cmap': map_obj.cmap.reversed(),
+        # 'norm': matplotlib.colors.PowerNorm(0.25, 0, map_obj.max())
+        'norm': matplotlib.colors.LogNorm(10, map_obj.max())
+    }
+    cb_kwargs = {**defaultKwargs, **cb_kwargs}
+
     if ax is None:
         fig, ax = plt.subplots(figsize=(12,12), subplot_kw={'projection':map_obj})
 
-    map_obj.plot(axes=ax, cmap=map_obj.cmap.reversed(), title=title)
+    map_obj.plot(axes=ax, title=title, **cb_kwargs)
     map_obj.draw_limb(color='black')
 
     ax.tick_params(which='major', direction='in')
     ax.grid(False)
     ax.set(xlabel=MAP_X_LABEL, ylabel=MAP_Y_LABEL)
     add_minor_ticks(ax)
-    plt.colorbar(fraction=0.046, pad=0.02)
+    # plt.colorbar(fraction=0.046, pad=0.02)
+    cbax, cb = apply_colorbar(fig, ax, 0.01, label='Intensity', **cb_kwargs)
 
     return fig, ax
 
@@ -171,7 +214,7 @@ def make_submap(obs_map, center, radius):
         The submap around the specified region.
     """
 
-    bl, tr = get_subregion(obs_map, center, radius)
+    bl, tr = get_subregion_corners(obs_map, center, radius)
     obs_submap = obs_map.submap(bottom_left=bl, top_right=tr)
 
     return obs_submap
@@ -211,7 +254,7 @@ def add_region(map_obj, ax, center, radius, **kwargs):
     return reg
 
 
-def get_subregion(map_obj, center, radius):
+def get_subregion_corners(map_obj, center, radius):
     """
     Obtain the bottom left and top right coordinates of the subregion
     specified by the provided coordinates.
@@ -240,7 +283,45 @@ def get_subregion(map_obj, center, radius):
     tr = SkyCoord(tr_x*u.arcsecond, tr_y*u.arcsecond, frame=map_obj.coordinate_frame)
 
     return bl, tr
-    
+
+
+def get_region_data(map_obj, reg, fill_val=0, b_full_size=False):
+    """
+    Get the map data contained within the provided region.
+
+    Parameters
+    ----------
+    map_obj : Sunpy map
+        The map containing the region of interest.
+    reg : PixelRegion
+        The bounding region.
+    fill_val : float
+        The default null value in indices outside the region.
+    b_full_size : bool
+        Specifies whether the returned array, reg_data,
+        is the same shape as the input array, data.
+        The default is False since it is wasteful in memory.
+
+    Returns
+    -------
+    reg_data : np.ndarray
+        An array containing only the pixel information within
+        the provided reg.
+    """
+
+    data = map_obj.data
+    reg_mask = (reg.to_pixel(map_obj.wcs)).to_mask()
+    xmin, xmax = reg_mask.bbox.ixmin, reg_mask.bbox.ixmax
+    ymin, ymax = reg_mask.bbox.iymin, reg_mask.bbox.iymax
+    reg_data = np.where(reg_mask.data==1, data[ymin:ymax, xmin:xmax], fill_val)
+
+    if b_full_size:
+        a = np.full(shape=data.shape, fill_value=fill_val, dtype=reg_data.dtype)
+        a[ymin:ymax, xmin:xmax] = reg_data
+        reg_data = a
+
+    return reg_data
+
 
 def make_lightcurve(start_time, end_time, wavelength, center, radius):
     """
@@ -276,7 +357,7 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
     print('Generating light curve data.')
 
-    files = file_io.get_fits_files(start_time, end_time, wavelength)
+    files = file_io.download_fits(start_time, end_time, wavelength)
     times, intensities = [], []
 
     # Download the files and handle potential file corruption.
@@ -297,16 +378,14 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
             print('Exceeded maximum number of attempts. Exitting.')
             file_io.sys.exit(1)
 
-        bl, tr = get_subregion(m, center, radius)
+        bl, tr = get_subregion_corners(m, center, radius)
         subm = m.submap(bottom_left=bl, top_right=tr)
         reg = CircleSkyRegion(SkyCoord(*center, unit='arcsecond', frame=subm.coordinate_frame), radius*u.arcsecond)
-        mask = (reg.to_pixel(subm.wcs)).to_mask()
-        times.append(convert.str_to_epoch(m.date.value))
+        reg_data = get_region_data(subm, reg)
 
-        # There is some inherent uncertainty in the next line
-        # when indexing the subm.data since the shape may slightly differ.
-        # TODO: determine shape index of second dimension
-        intensities.append(utils.np.sum(subm.data[0:mask.data.shape[0], 0:mask.data.shape[1]][mask.data!=0]))
+        time_str = m.date.value#.split('.')[0] # Remove the milliseconds
+        times.append(convert.str_to_epoch(time_str))
+        intensities.append(np.sum(reg_data))
 
     return times, intensities
 
@@ -349,7 +428,10 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
         or the updated axes object if it was provided.
     """
 
-    defaultKwargs = {'linestyle':'dashed', 'linewidth':0.6, 'marker':'o', 'markersize':2, 'color':'black'}
+    defaultKwargs = {
+        'linestyle':'dashed', 'linewidth':0.6, 'marker':'o',
+        'markersize':2, 'color':'black'
+    }
     kwargs = {**defaultKwargs, **kwargs}
 
     # Convert the time data to datetime objects.
@@ -407,7 +489,7 @@ def process_observation(obs):
     file_io.make_directories(end_date)
     lightcurves_dir = file_io.LIGHTCURVES_DIR_FORMAT.format(date=start_date)
     images_dir = file_io.IMAGES_DIR_FORMAT.format(date=start_date)
-    print('Generating plots for ' + str(obs['start_time']).replace('T', ' ') + ' through ' + str(obs['end_time']).replace('T', ' '))
+    print(f'Generating plots for {obs["start_time"].replace("T", " ")} through {obs["end_time"].replace("T", " ")}')
     
     startt = obs['start_time'].replace('-','')  .replace(':','')
     endt = obs['end_time'].replace('-','').replace(':','')
@@ -423,9 +505,8 @@ def process_observation(obs):
         obs['N'] = utils.adjust_n(len(r[0]), obs['N'])
 
         fig = plt.figure(figsize=(10, 7))
-        gs = fig.add_gridspec(3, 2, height_ratios=[4, 1, 1])
         gs = fig.add_gridspec(2, 1, height_ratios=[2, 1])
-        gs_maps = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0])
+        gs_maps = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0], wspace=0.3)
         gs_lc = gs[1].subgridspec(2, 1, hspace=0)
 
         # Make the full map.
@@ -439,13 +520,12 @@ def process_observation(obs):
         obs_submap = make_submap(obs_map, obs['center'], obs['radius'])
         submap_ax = fig.add_subplot(gs_maps[0,1], projection=obs_submap)
         fig, submap_ax = plot_map(obs_submap, fig, submap_ax,
-            title='Selected region: ' + str(obs['center']) + ', r=' + str(obs['radius']))
+            title=f'Selected region: {obs["center"]}, r={obs["radius"]}')
         submap_reg = add_region(obs_submap, submap_ax, obs['center'], obs['radius'],
-            alpha=0.5, label='Region', color=COLORMAP[wavelength])
+            alpha=1, label='Region', color=COLORMAP[wavelength])
         
-        csv_file = lightcurves_dir + 'lc_' + startt + '-' + endt + '_' + str(wavelength)  + '_N' + str(obs['N']) + '_' + obs['name'] + '.csv'
+        csv_file = f'{lightcurves_dir}lc_{startt}-{endt}_{wavelength}_N{obs["N"]}_{obs["name"]}.csv'
         if file_io.os.path.exists(csv_file):
-            # lightcurve, lightcurve_bc, lightcurve_detrended = read_lightcurves(csv_file)
             lightcurve = file_io.read_lightcurves(csv_file)
         else:
             # Then make the lightcurve.
@@ -462,7 +542,7 @@ def process_observation(obs):
             markersize=1, linestyle='solid', label='Lightcurve')
         plot_lightcurve(lightcurve_bc, fig, lightcurve_ax,
             xlabel='', ylabel='Intensity', title='Region lightcurve',
-            markersize=1, color='steelblue', alpha=0.5, linestyle='dotted', label='Boxcar, $N=$' + str(obs['N']))
+            markersize=1, color='steelblue', alpha=0.5, linestyle='dotted', label=f'Boxcar, $N=${obs["N"]}')
         plt.setp(lightcurve_ax.get_xticklabels(), visible=False)
         lightcurve_ax.legend(prop={'size': 6})
 
@@ -477,15 +557,14 @@ def process_observation(obs):
         [xmin, xmax, ymin, ymax] = lightcurve_ax.axis()
         detrended_ax.set_xlim(left=xmin, right=xmax)
 
-        # save_lightcurves((lightcurve[0], lightcurve[1], lightcurve_bc[1], lightcurve_detrended[1]), csv_file) # Save all lightcurves to file
-        file_io.save_lightcurves((lightcurve[0], lightcurve[1]), csv_file) # Save only raw values
+        file_io.save_lightcurves((lightcurve[0], lightcurve[1]), csv_file)
 
         title = f'AIA ' + str(int(obs_map.wavelength.value)) + f' {obs_map.date}'.replace('T', ' ')
         fig.suptitle(title)
 
-        fig_file = images_dir + 'plots_' + startt + '-' + endt + '_' + str(wavelength)  + '_N' + str(obs['N']) + '_' + obs['name'] + '.png'
-        plt.savefig(fig_file, aspect='auto', bbox_inches='tight', dpi=300)
-        print('Saved plots to \'' + fig_file + '\'')
+        fig_file = f'{images_dir}plots_{startt}-{endt}_{wavelength}_N{obs["N"]}_{obs["name"]}.png'
+        plt.savefig(fig_file, bbox_inches='tight', dpi=300)
+        print(f'Saved plots to \'{fig_file}\'')
 
         # Package the generated products into a dictionary.
         d = {'obs_map': obs_map, 'obs_submap': obs_submap, 'lightcurve': lightcurve, 'fig': fig}
