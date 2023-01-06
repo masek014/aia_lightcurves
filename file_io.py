@@ -44,13 +44,14 @@ def make_directories(date):
 
 def download_fits_parallel(start_time, end_time, wavelength, b_save_files=True, b_show_progress=False):
     """
-    A second attempt at parallelizing Fido downloads.
+    An attempt at parallelizing Fido downloads.
     WIP.
+    This hasn't been too successful so far.
     """
 
     result = Fido.search(a.Time(start_time, end_time), 
-                         a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), 
-                         a.Sample(12 * u.second))
+        a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), 
+        a.Sample(12 * u.second))
 
     if b_save_files:
         path = DATA_DIR + start_time.split('T')[0].replace('-', '') + '/'
@@ -58,13 +59,14 @@ def download_fits_parallel(start_time, end_time, wavelength, b_save_files=True, 
         path = None
     
     jobs = []
-    files = []
+    files = [] # TODO: Need to put results from fetch into here
     if b_save_files:
         for res in result[0]:
             date = res[0].value.split(' ')[0].replace('-', '')
-            path = DATA_DIR + date + '/'
+            path = FITS_DIR_FORMAT.format(date=date)
             p = multiprocessing.Process(target=Fido.fetch,
-                args=(res,), kwargs={'max_conn':1, 'site':'ROB', 'path':path, 'progress':b_show_progress})
+                args=(res,), 
+                kwargs={'max_conn':1, 'site':'ROB', 'path':path, 'progress':b_show_progress})
             jobs.append(p)
             p.start()
     else:
@@ -78,14 +80,12 @@ def download_fits_parallel(start_time, end_time, wavelength, b_save_files=True, 
 
     # TODO: Determine if we want this or not
     # Retry downloading any failed files.
-    files = Fido.fetch(files)
-    print('Error fits:')
-    for f in files:
-        print(f)
+    # https://docs.sunpy.org/en/stable/guide/acquiring_data/fido.html#retrying-downloads
+    # print('Error fits:', files.errors)
+    # files = Fido.fetch(files)
 
-    # files_dir = FITS_DIR + start_time.split('T')[0].replace('-', '') + '/'
     if path is not None:
-        files = glob.glob(path + '*_' + f'{wavelength:04d}' + '_*')
+        files = glob.glob(f'{path}*_{wavelength:04d}_*')
         files.sort()
 
     return files
@@ -145,7 +145,7 @@ def download_fits2(start_time, end_time, wavelength, b_save_files=True, b_show_p
     The files are downloaded through Fido one at a time.
     This allows the handling of connection errors/timeouts so that
     the download can be reattempted rather than crashing the
-    entire program.
+    entire process.
 
     Use Fido to get the FITS files for the specified time interval and wavelength.
     This method may take considerable time to run because it serially uses Fido.
@@ -171,7 +171,7 @@ def download_fits2(start_time, end_time, wavelength, b_save_files=True, b_show_p
         A list containing all of the downloaded file paths.
     """
 
-    # Divide up the start and end time into 10 second segments.
+    # Divide up the start and end time into 12 second segments.
     start_dt = datetime.strptime(start_time, TIME_STR_FORMAT)
     end_dt = datetime.strptime(end_time, TIME_STR_FORMAT)
     times_list = [] # List of time strings for Fido
@@ -180,29 +180,25 @@ def download_fits2(start_time, end_time, wavelength, b_save_files=True, b_show_p
     while cur_time < end_dt:
         cur_timestr = datetime.strftime(cur_time, TIME_STR_FORMAT)
         times_list.append(cur_timestr)
-        cur_time = cur_time + timedelta(seconds=10)
+        cur_time = cur_time + timedelta(seconds=12)
     times_list.append(end_time)
 
+    files = []
     for i in range(len(times_list)-1):
         attempt_number = 1
         while attempt_number <= MAX_DOWNLOAD_ATTEMPTS:
             print(f'Attempting data download for time {times_list[i]} - {times_list[i+1]}.')
             try:
-                download_fits(times_list[i], times_list[i+1], wavelength, b_save_files, b_show_progress)
+                files += download_fits(times_list[i], times_list[i+1], wavelength, b_save_files, b_show_progress)
                 print('Download successful.')
                 break
             except (http.client.RemoteDisconnected, requests.exceptions.ConnectionError) as e:
                 print(f'Exception on attempt number {attempt_number}/{MAX_DOWNLOAD_ATTEMPTS}.\n{e}')
                 attempt_number += 1
                 continue
-        # This is only True if the except block is executed for all attempts.
         if attempt_number > MAX_DOWNLOAD_ATTEMPTS:
             print('Exceeded maximum number of attempts. Exitting.')
             sys.exit(1)
-
-    fits_dir = FITS_DIR_FORMAT.format(date=start_time.split('T')[0].replace('-', ''))
-    files = glob.glob(fits_dir + '*_' + f'{wavelength:04d}' + '_*')
-    files.sort()
 
     return files
 

@@ -21,7 +21,7 @@ def str_to_epoch(s):
     to the provided string.
     """
     
-    dt = datetime.strptime(s, DATETIME_FORMAT+'%.f').replace(tzinfo=timezone.utc)
+    dt = datetime.strptime(s, DATETIME_FORMAT+'.%f').replace(tzinfo=timezone.utc)
     
     return datetime_to_epoch(dt)
 

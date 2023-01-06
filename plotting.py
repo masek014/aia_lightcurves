@@ -20,7 +20,7 @@ MAP_Y_LABEL = 'Y (arcseconds)'
 COLORMAP = {
     94:'red', 131:'red', 171:'cyan', 193:'cyan', 211:'cyan',
     304:'cyan', 335:'red', 1600:'red', 1700:'cyan'
-}
+} # Sets compatible region colors for each AIA filter
 
 
 def add_minor_ticks(ax):
@@ -52,8 +52,8 @@ def apply_colorbar(fig, ax, width=0.005, **kwargs):
         The axes to which the colorbar is applied.
     width : float
         The colorbar width as a fraction of the plot width.
-    kwargs : dict
-        Keyword arguments to the ColorbarBase method.
+    kwargs
+        Keyword arguments to the matplotlib.colorbar.ColorbarBase method.
     Returns
     -------
     cbax : matplotlib axes
@@ -102,7 +102,7 @@ def get_map(aia_wavelength, map_time):
     info = (a.Instrument('aia') & a.Wavelength(aia_wavelength*u.angstrom))
     look_back = {'minutes': 30}
     
-    map_dt = convert.datetime.strptime(map_time, DATETIME_FORMAT)
+    map_dt = convert.datetime.strptime(map_time, DATETIME_FORMAT+'.%f')
     past = map_dt - convert.timedelta(**look_back)
     past_date = past.strftime(DATETIME_FORMAT)
     startt = str(past_date)
@@ -157,6 +157,8 @@ def plot_map(map_obj, fig=None, ax=None, title='', **cb_kwargs):
         will be added to the existing ax object.
     title : str
         The title string.
+    cb_kwargs
+        Keywork parameters for the colorbar (norm, cmap, etc.).
 
     Returns
     -------
@@ -170,7 +172,6 @@ def plot_map(map_obj, fig=None, ax=None, title='', **cb_kwargs):
 
     defaultKwargs = {
         'cmap': map_obj.cmap.reversed(),
-        # 'norm': matplotlib.colors.PowerNorm(0.25, 0, map_obj.max())
         'norm': matplotlib.colors.LogNorm(10, map_obj.max())
     }
     cb_kwargs = {**defaultKwargs, **cb_kwargs}
@@ -185,7 +186,6 @@ def plot_map(map_obj, fig=None, ax=None, title='', **cb_kwargs):
     ax.grid(False)
     ax.set(xlabel=MAP_X_LABEL, ylabel=MAP_Y_LABEL)
     add_minor_ticks(ax)
-    # plt.colorbar(fraction=0.046, pad=0.02)
     cbax, cb = apply_colorbar(fig, ax, 0.01, label='Intensity', **cb_kwargs)
 
     return fig, ax
@@ -234,8 +234,8 @@ def add_region(map_obj, ax, center, radius, **kwargs):
         Coordinates for the region center, (x,y), in arcseconds.
     radius : float
         The radius of the circular region.
-    **kwargs : dict
-        Style parameters of the plotted lightcurve.
+    **kwargs
+        Style parameters of the plotted region.
 
     Returns
     -------
@@ -357,7 +357,7 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
     print('Generating light curve data.')
 
-    files = file_io.download_fits(start_time, end_time, wavelength)
+    files = file_io.download_fits2(start_time, end_time, wavelength)
     times, intensities = [], []
 
     # Download the files and handle potential file corruption.
@@ -370,7 +370,8 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
                 break
             except IOError as e: # File corruption, attempt redownload.
                 print(e)
-                print(f'FITS read error on attempt {attempt_number}. Deleting file and retrying download.')
+                print(f'FITS read error on attempt {attempt_number}.\
+                     Deleting file and retrying download.')
                 f = file_io.redownload_file(f)
                 continue
         # This is only True if the except block is executed for all attempts.
@@ -380,7 +381,8 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
         bl, tr = get_subregion_corners(m, center, radius)
         subm = m.submap(bottom_left=bl, top_right=tr)
-        reg = CircleSkyRegion(SkyCoord(*center, unit='arcsecond', frame=subm.coordinate_frame), radius*u.arcsecond)
+        reg = CircleSkyRegion(SkyCoord(*center, unit='arcsecond',
+            frame=subm.coordinate_frame), radius*u.arcsecond)
         reg_data = get_region_data(subm, reg)
 
         time_str = m.date.value#.split('.')[0] # Remove the milliseconds
@@ -390,7 +392,7 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
     return times, intensities
 
 
-def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='', **kwargs):
+def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='', **plot_kwargs):
     """
     A general method for plotting lightcurve data.
     If fig and ax are provided, then the lightcurve data
@@ -415,7 +417,7 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
         The y-axis label.
     title : str
         The title string.
-    **kwargs : dict
+    **plot_kwargs
         Style parameters of the plotted lightcurve.
 
     Returns
@@ -432,7 +434,7 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
         'linestyle':'dashed', 'linewidth':0.6, 'marker':'o',
         'markersize':2, 'color':'black'
     }
-    kwargs = {**defaultKwargs, **kwargs}
+    plot_kwargs = {**defaultKwargs, **plot_kwargs}
 
     # Convert the time data to datetime objects.
     converted_datetimes = list(map(convert.epoch_to_datetime, lightcurve[0]))
@@ -443,7 +445,7 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
     if fig is None:
         fig, ax = plt.subplots(figsize=(12,4))
     
-    line = ax.plot(*lightcurve_converted, **kwargs)
+    line = ax.plot(*lightcurve_converted, **plot_kwargs)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     ax.xaxis.set_minor_locator(mdates.MinuteLocator(interval=1))
     ax.tick_params(which='major', direction='in')

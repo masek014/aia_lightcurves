@@ -23,9 +23,9 @@ def adjust_n(num_data, N):
     if num_data < 2*N:
         N_old = N
         N = max(num_data//10, 3)
-        if N%2 == 0:
+        if N % 2 == 0:
             N += 1
-        print('Insufficient data points for given boxcar width N=' + str(N_old) + '. Defaulting to N=' + str(N))
+        print(f'Insufficient data points for given boxcar width N={N_old}. Defaulting to N={N}')
 
     return N
 
@@ -56,9 +56,9 @@ def boxcar_average(arr, N, insert_val=np.nan):
         The boxcar width used to perform the average.
     """
 
-    print('Applying boxcar average. Provided N=' + str(N))
+    print(f'Applying boxcar average. Provided N={N}')
     N = adjust_n(len(arr), N)
-
+    
     bc = np.convolve(arr, np.ones(N)/N, mode='valid')
     for i in range((N-1)//2):
         bc = np.insert(bc, 0, insert_val)
