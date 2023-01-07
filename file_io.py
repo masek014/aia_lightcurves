@@ -10,7 +10,9 @@ import astropy.units as u
 
 from datetime import datetime, timedelta
 from sunpy.net import Fido, attrs as a
+import astropy.time
 
+from .net import aia_requests as air
 
 MAX_DOWNLOAD_ATTEMPTS = 3
 DATA_DIR = os.getcwd() + '/data/'
@@ -42,52 +44,32 @@ def make_directories(date):
             os.mkdir(d)
 
 
-def download_fits_parallel(start_time, end_time, wavelength, b_save_files=True, b_show_progress=False):
-    """
-    An attempt at parallelizing Fido downloads.
-    WIP.
-    This hasn't been too successful so far.
-    """
 
-    result = Fido.search(a.Time(start_time, end_time), 
-        a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), 
-        a.Sample(12 * u.second))
 
-    if b_save_files:
-        path = DATA_DIR + start_time.split('T')[0].replace('-', '') + '/'
-    else:
-        path = None
-    
-    jobs = []
-    files = [] # TODO: Need to put results from fetch into here
-    if b_save_files:
-        for res in result[0]:
-            date = res[0].value.split(' ')[0].replace('-', '')
-            path = FITS_DIR_FORMAT.format(date=date)
-            p = multiprocessing.Process(target=Fido.fetch,
-                args=(res,), 
-                kwargs={'max_conn':1, 'site':'ROB', 'path':path, 'progress':b_show_progress})
-            jobs.append(p)
-            p.start()
-    else:
-        p = multiprocessing.Process(target=Fido.fetch,
-                args=(result,), kwargs={'max_conn':1, 'site':'ROB', 'progress':b_show_progress})
-        jobs.append(p)
-        p.start()
+@u.quantity_input
+def download_fits_parallel(
+    start_time: astropy.time.Time,
+    end_time: astropy.time.Time,
+    wavelengths: list[u.Angstrom],
+    num_simultaneous_connections: int=5,
+    num_retries_for_failed: int=10,
+    print_debug_messages=False
+) -> list[air.DownloadResult]:
+    ''' download fits in parallel using raw HTTP requests + XML '''
+    orig_debug = air.cfg.debug
+    air.cfg.debug = print_debug_messages
 
-    for job in jobs:
-        job.join()
+    out = FITS_DIR_FORMAT.format(start_time.strftime(air.TIME_FMT))
+    files = air.download_aia_between(
+        start=start_time,
+        end=end_time,
+        wavelengths=wavelengths,
+        fits_out_dir=out,
+        num_jobs=num_simultaneous_connections,
+        attempts=num_retries_for_failed
+    )
 
-    # TODO: Determine if we want this or not
-    # Retry downloading any failed files.
-    # https://docs.sunpy.org/en/stable/guide/acquiring_data/fido.html#retrying-downloads
-    # print('Error fits:', files.errors)
-    # files = Fido.fetch(files)
-
-    if path is not None:
-        files = glob.glob(f'{path}*_{wavelength:04d}_*')
-        files.sort()
-
+    air.cfg.debug = orig_debug
     return files
 
 
