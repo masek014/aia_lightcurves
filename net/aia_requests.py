@@ -16,6 +16,12 @@ import xmltodict
 # configure this to be as you want
 read_timeout = 10 << u.s
 
+
+class DownloadResult(typing.NamedTuple):
+    file: str
+    success: bool
+
+
 @u.quantity_input
 def download_aia_between(
     start: astropy.time.Time,
@@ -24,7 +30,7 @@ def download_aia_between(
     fits_out_dir: str,
     num_jobs: int=8,
     attempts: int=5
-) -> list[str]:
+) -> list[DownloadResult]:
     '''
     download AIA fits files given the input args.
     returns: the list of filenames that were downloaded
@@ -166,10 +172,6 @@ def extract_urls(request_result: str) -> list[str]:
     )
     return list(uu['url'] for uu in urlz)
 
-
-class DownloadResult(typing.NamedTuple):
-    file: str
-    success: bool
 
 def actual_download_files(output_directory: str, url: str) -> list[DownloadResult]:
     '''
