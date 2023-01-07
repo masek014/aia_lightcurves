@@ -33,7 +33,7 @@ def download_aia_between(
 ) -> list[DownloadResult]:
     '''
     download AIA fits files given the input args.
-    returns: the list of filenames that were downloaded
+    returns: the list of filenames that were downloaded as DownloadResults
     '''
     files_downloaded = []
     all_urls = []
@@ -173,7 +173,7 @@ def extract_urls(request_result: str) -> list[str]:
     return list(uu['url'] for uu in urlz)
 
 
-def actual_download_files(output_directory: str, url: str) -> list[DownloadResult]:
+def actual_download_files(output_directory: str, url: str) -> DownloadResult:
     '''
     download AIA files
     return: (file name output, success or not)
