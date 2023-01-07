@@ -57,7 +57,7 @@ def download_aia_between(
             )
         logging.debug('done try downloads')
 
-        errored = [all_urls[i] for (i, res) in enumerate(files_downloaded) if not res[1]]
+        errored = [all_urls[i] for (i, res) in enumerate(files_downloaded) if not res.success]
         if not errored: break
 
         failed = len(errored)
