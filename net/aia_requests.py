@@ -79,9 +79,9 @@ def download_aia_between(
         errored = [res.url for res in files_downloaded if not res.success]
         failed = len(errored)
         initial = len(all_urls)
-        errored_to_print = '\n' + '\t\n'.join(errored)
-        debug_print(f'{failed} / {initial} downloads failed.')
-        debug_print(f'retrying the following (attempt {1 + tries} / {attempts}): {errored_to_print}')
+        errored_to_print = '\n' + '\n\t'.join(errored)
+        print(f'{failed} / {initial} downloads failed.')
+        print(f'retrying the following (attempt {1 + tries} / {attempts}): {errored_to_print}')
         all_urls = copy.deepcopy(errored)
         tries += 1
 
@@ -224,7 +224,7 @@ def actual_download_files(output_directory: str, url: str) -> DownloadResult:
 def test():
     print('request test')
     start = astropy.time.Time('2019-04-03T17:40:00.0')
-    end = astropy.time.Time('2019-04-03T17:55:00.0')
+    end = astropy.time.Time('2019-04-03T18:40:00.0')
     wavelengths = [171 * u.Angstrom]
 
     out_dir = 'test-manual-download'
