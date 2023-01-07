@@ -358,6 +358,7 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
     print('Generating light curve data.')
 
     files = file_io.download_fits2(start_time, end_time, wavelength)
+    # files = file_io.download_fits_parallel(start_time, end_time, wavelength)
     times, intensities = [], []
 
     # Download the files and handle potential file corruption.
@@ -493,7 +494,7 @@ def process_observation(obs):
     images_dir = file_io.IMAGES_DIR_FORMAT.format(date=start_date)
     print(f'Generating plots for {obs["start_time"].replace("T", " ")} through {obs["end_time"].replace("T", " ")}')
     
-    startt = obs['start_time'].replace('-','')  .replace(':','')
+    startt = obs['start_time'].replace('-','').replace(':','')
     endt = obs['end_time'].replace('-','').replace(':','')
     dicts = []
 
@@ -561,7 +562,7 @@ def process_observation(obs):
 
         file_io.save_lightcurves((lightcurve[0], lightcurve[1]), csv_file)
 
-        title = f'AIA ' + str(int(obs_map.wavelength.value)) + f' {obs_map.date}'.replace('T', ' ')
+        title = 'AIA ' + str(int(obs_map.wavelength.value)) + f' {obs_map.date}'.replace('T', ' ')
         fig.suptitle(title)
 
         fig_file = f'{images_dir}plots_{startt}-{endt}_{wavelength}_N{obs["N"]}_{obs["name"]}.png'
