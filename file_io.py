@@ -59,7 +59,9 @@ def download_fits_parallel(
     orig_debug = air.cfg.debug
     air.cfg.debug = print_debug_messages
 
-    out = FITS_DIR_FORMAT.format(start_time.strftime(air.TIME_FMT))
+    date = start_time.strftime(air.TIME_FMT)
+    make_directories(date=date)
+    out = FITS_DIR_FORMAT.format(date=date)
     files = air.download_aia_between(
         start=start_time,
         end=end_time,
