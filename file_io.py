@@ -53,7 +53,7 @@ def download_fits_parallel(
     wavelengths: list[u.Angstrom],
     num_simultaneous_connections: int=5,
     num_retries_for_failed: int=10,
-    print_debug_messages=False
+    print_debug_messages: bool=False
 ) -> list[air.DownloadResult]:
     ''' download fits in parallel using raw HTTP requests + XML '''
     orig_debug = air.cfg.debug
