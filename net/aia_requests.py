@@ -15,6 +15,8 @@ import sys
 import typing
 import xmltodict
 
+TIME_FMT = '%Y%m%d%H%M%S'
+
 @dataclass
 class Config:
     read_timeout: u.s
@@ -116,7 +118,6 @@ def build_query_string(start: astropy.time.Time, end: astropy.time.Time, wavelen
     given start, end times and a wavelength,
     return a properly-formatted AIA XML query string.
     '''
-    TIME_FMT = '%Y%m%d%H%M%S'
     start_str, end_str = start.strftime(TIME_FMT), end.strftime(TIME_FMT)
     wav_num = wavelength.to(u.Angstrom).value
 
