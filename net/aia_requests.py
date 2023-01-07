@@ -1,6 +1,7 @@
+from . import aia_fmt_xml as afx
+
 import astropy.units as u
 import astropy.time
-import aia_fmt_xml as afx
 import functools
 import logging
 import math
@@ -9,6 +10,7 @@ import os
 import requests
 import requests.exceptions
 import sys
+import typing
 import xmltodict
 
 # configure this to be as you want
@@ -33,7 +35,7 @@ def download_aia_between(
     logging.debug('start find aia urls')
     for w in wavelengths:
         all_urls += build_aia_urls(start, end, w)
-    logging.debug('done find aia urls')
+    logging.debug(f'done find aia urls:\n{all_urls}')
 
     download_wrapper = functools.partial(actual_download_files, fits_out_dir)
 
@@ -56,7 +58,7 @@ def download_aia_between(
         initial = len(all_urls)
         errored_to_print = '\n' + '\t\n'.join(errored)
         logging.info(f'{failed} / {initial} downloads failed.')
-        logging.info(f'retrying the following (attempt {tries} / {attempts}): {errored_to_print}')
+        logging.info(f'retrying the following (attempt {1 + tries} / {attempts}): {errored_to_print}')
         all_urls = errored
         tries += 1
 
@@ -165,13 +167,17 @@ def extract_urls(request_result: str) -> list[str]:
     return list(uu['url'] for uu in urlz)
 
 
-def actual_download_files(output_directory: str, url: str) -> list[tuple[str, bool]]:
+class DownloadResult(typing.NamedTuple):
+    file: str
+    success: bool
+
+def actual_download_files(output_directory: str, url: str) -> list[DownloadResult]:
     '''
     download AIA files
     return: (file name output, success or not)
     '''
     logging.debug('gotcha:', url)
-    fn = ''
+    full_fn = '🥲'
     try:
         with requests.get(url, stream=True, timeout=read_timeout.to(u.s).value) as res:
             res.raise_for_status()
@@ -182,9 +188,9 @@ def actual_download_files(output_directory: str, url: str) -> list[tuple[str, bo
                     f.write(chunk)
 
     except requests.exceptions.ReadTimeout:
-        return (fn, False)
+        return DownloadResult(full_fn, False)
 
-    return (fn, True)
+    return DownloadResult(full_fn, True)
 
 
 def test():
