@@ -50,7 +50,7 @@ def download_aia_between(
     while tries < attempts:
         logging.debug('start try downloads')
         with mp.Pool(processes=num_jobs) as p:
-            files_downloaded = p.map(
+            files_downloaded += p.map(
                 download_wrapper,
                 all_urls,
                 chunksize=math.ceil(len(all_urls) / num_jobs)
