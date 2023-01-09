@@ -1,4 +1,7 @@
-from . import aia_fmt_xml as afx
+try:
+    from . import aia_fmt_xml as afx
+except ImportError:
+    import aia_fmt_xml as afx
 from dataclasses import dataclass
 
 import astropy.units as u
@@ -31,8 +34,10 @@ def debug_print(*args, **kwargs):
 class DownloadResult(typing.NamedTuple):
     url: str
     file: str
-    success: bool
-    error: Exception
+    error: Exception=None
+    @property
+    def success(self):
+        return (self.error is None)
 
 
 @u.quantity_input
@@ -204,29 +209,30 @@ def actual_download_files(output_directory: str, url: str) -> DownloadResult:
             file_size = int(res.headers['Content-Length'])
 
             full_fn = f'{output_directory}/{fn}'
-            if os.path.exists(full_fn) and os.stat(full_fn):
+            if os.path.exists(full_fn) and os.stat(full_fn).st_size == file_size:
                 print('file already exists and is downloaded:', full_fn)
                 debug_print()
-                return DownloadResult(url, full_fn, True, None)
+                return DownloadResult(url, full_fn, None)
 
             with open(full_fn, 'wb') as f:
                 for chunk in res.iter_content(chunk_size=1024 * 1024):
                     f.write(chunk)
 
     except requests.exceptions.ReadTimeout as e:
-        return DownloadResult(url, full_fn, False, e)
+        return DownloadResult(url, full_fn, e)
     except requests.exceptions.HTTPError as e:
-        return DownloadResult(url, full_fn, False, e)
+        return DownloadResult(url, full_fn, e)
 
-    return DownloadResult(url, full_fn, True, None)
+    return DownloadResult(url, full_fn, None)
 
 
 def test():
     print('request test')
     start = astropy.time.Time('2019-04-03T17:40:00.0')
-    end = astropy.time.Time('2019-04-03T18:40:00.0')
+    end = astropy.time.Time('2019-04-03T18:30:00.0')
     wavelengths = [171 * u.Angstrom]
 
+    cfg.debug = True
     out_dir = 'test-manual-download'
     os.makedirs(out_dir, exist_ok=True)
     ret = download_aia_between(
@@ -235,7 +241,7 @@ def test():
         wavelengths=wavelengths,
         fits_out_dir=out_dir,
         num_jobs=8,
-        attempts=10
+        attempts=3
     )
     if all(r.success for r in ret):
         print('all good')
