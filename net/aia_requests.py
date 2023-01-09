@@ -14,7 +14,6 @@ import multiprocessing.dummy
 import os
 import requests
 import requests.exceptions
-import sys
 import typing
 import xmltodict
 
@@ -232,7 +231,6 @@ def test():
     end = astropy.time.Time('2019-04-03T18:30:00.0')
     wavelengths = [171 * u.Angstrom]
 
-    cfg.debug = True
     out_dir = 'test-manual-download'
     os.makedirs(out_dir, exist_ok=True)
     ret = download_aia_between(
