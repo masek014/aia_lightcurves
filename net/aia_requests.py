@@ -88,7 +88,7 @@ def download_aia_between(
 
         retry = [res.url for res in failed]
         failed = len(retry)
-        errored_to_print = '\n' + '\t\n'.join(retry)
+        errored_to_print = '\n\t' + '\n\t'.join(retry)
         print(f'{failed} / {initial_num} downloads failed.')
         print(f'retrying the following (attempt {1 + tries} / {attempts}): {errored_to_print}')
         all_urls = copy.deepcopy(retry)
