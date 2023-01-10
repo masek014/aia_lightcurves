@@ -13,7 +13,7 @@ import multiprocessing as mp
 import multiprocessing.dummy
 import os
 import requests
-import requests.exceptions
+import requests.exceptions as rex
 import typing
 import xmltodict
 
@@ -52,44 +52,49 @@ def download_aia_between(
     download AIA fits files given the input args.
     returns: the list of filenames that were downloaded as DownloadResults
     '''
-    files_downloaded = []
     all_urls = []
+    successful = []
+    failed = []
     # do this sequentially because it's fast
     debug_print('start find aia urls')
     for w in wavelengths:
         all_urls += build_aia_urls(start, end, w)
-    debug_print(f'done find aia urls:\n{all_urls}')
+    debug_print(f'done find aia urls')
 
     download_wrapper = functools.partial(actual_download_files, fits_out_dir)
 
     # do this in parallel because it's slow
     tries = 0
+    initial_num = len(all_urls)
     while tries < attempts:
         debug_print('start try downloads')
         with mp.dummy.Pool(processes=num_jobs) as p:
-            files_downloaded += p.map(
+            cur_downloaded = p.map(
                 download_wrapper,
                 all_urls,
                 chunksize=math.ceil(len(all_urls) / num_jobs)
             )
         debug_print('done try downloads')
 
-        all_downloads_worked = all(res.success for res in files_downloaded)
-        if all_downloads_worked: break
-        else:
-            if cfg.debug:
-                debug_print('some failed ones:\n', [f for f in files_downloaded if not f.success])
+        failed = []
+        for f in cur_downloaded:
+            if f.success: successful.append(f)
+            else: failed.append(f)
 
-        errored = [res.url for res in files_downloaded if not res.success]
-        failed = len(errored)
-        initial = len(all_urls)
-        errored_to_print = '\n' + '\n\t'.join(errored)
-        print(f'{failed} / {initial} downloads failed.')
+        all_successful = (failed == [])
+        if all_successful: break
+        elif cfg.debug:
+            debug_print('some failed ones:\n', failed)
+
+        retry = [res.url for res in failed]
+        failed = len(retry)
+        errored_to_print = '\n\t' + '\n\t'.join(retry)
+        print(f'{failed} / {initial_num} downloads failed.')
         print(f'retrying the following (attempt {1 + tries} / {attempts}): {errored_to_print}')
-        all_urls = copy.deepcopy(errored)
+        all_urls = copy.deepcopy(retry)
         tries += 1
 
-    return files_downloaded
+    return successful + failed
 
 
 @u.quantity_input
@@ -209,26 +214,24 @@ def actual_download_files(output_directory: str, url: str) -> DownloadResult:
 
             full_fn = f'{output_directory}/{fn}'
             if os.path.exists(full_fn) and os.stat(full_fn).st_size == file_size:
-                print('file already exists and is downloaded:', full_fn)
+                debug_print('file already exists and is downloaded:', full_fn)
                 debug_print()
-                return DownloadResult(url, full_fn, None)
+                return DownloadResult(url, full_fn)
 
             with open(full_fn, 'wb') as f:
                 for chunk in res.iter_content(chunk_size=1024 * 1024):
                     f.write(chunk)
 
-    except requests.exceptions.ReadTimeout as e:
-        return DownloadResult(url, full_fn, e)
-    except requests.exceptions.HTTPError as e:
+    except (rex.RequestException, rex.HTTPError) as e:
         return DownloadResult(url, full_fn, e)
 
-    return DownloadResult(url, full_fn, None)
+    return DownloadResult(url, full_fn)
 
 
 def test():
     print('request test')
     start = astropy.time.Time('2019-04-03T17:40:00.0')
-    end = astropy.time.Time('2019-04-03T18:30:00.0')
+    end = astropy.time.Time('2019-04-03T17:50:00.0')
     wavelengths = [171 * u.Angstrom]
 
     out_dir = 'test-manual-download'
@@ -260,4 +263,5 @@ def timed_test():
 
 
 if __name__ == '__main__':
+    cfg.debug = True
     timed_test()

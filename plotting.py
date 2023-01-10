@@ -1,5 +1,6 @@
 import sunpy.map
 import astropy.units as u
+import astropy.time
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -323,7 +324,13 @@ def get_region_data(map_obj, reg, fill_val=0, b_full_size=False):
     return reg_data
 
 
-def make_lightcurve(start_time, end_time, wavelength, center, radius):
+def make_lightcurve(
+    start_time: str | astropy.time.Time,
+    end_time: str | astropy.time.Time,
+    wavelength: int | u.Quantity,
+    center: tuple[float, float],
+    radius: float
+) -> tuple[list[float], list[float]]:
     """
     Obtain the lightcurve data for the specified parameters
     for the given region. Currently, the intensities are
@@ -334,21 +341,22 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
     Parameters
     ----------
-    start_time : str
+    start_time : str | astropy.time.Time
         The start time of the observation. Formatted as
         '%Y-%m-%dT%H:%M:%S.%f'.
-    end_time : str
+    end_time : str | astropy.time.Time
         The end time of the observation. Formatted as
         '%Y-%m-%dT%H:%M:%S.%f'.
-    wavelength : int
+    wavelength : int | u.Angstrom
         The wavelength of interest.
-    center : tuple
+    center : tuple[float, float]
         Coordinates for the region center, (x,y), in arcseconds.
     radius : float
         The radius of the circular region.
 
     Returns
     -------
+    tuple[list[float], list[float]]
     times : list
         The times for each data point.
     intensities : list
@@ -357,28 +365,25 @@ def make_lightcurve(start_time, end_time, wavelength, center, radius):
 
     print('Generating light curve data.')
 
-    files = file_io.download_fits2(start_time, end_time, wavelength)
-    # files = file_io.download_fits_parallel(start_time, end_time, wavelength)
+    files = file_io.download_fits_parallel(
+        start_time=astropy.time.Time(start_time),
+        end_time=astropy.time.Time(end_time),
+        wavelengths=[wavelength << u.Angstrom],
+        num_simultaneous_connections=8,
+        num_retries_for_failed=file_io.MAX_DOWNLOAD_ATTEMPTS,
+        print_debug_messages=False,
+    )
+
+    if any(not f.success for f in files):
+        maxx = file_io.MAX_DOWNLOAD_ATTEMPTS
+        raise RuntimeError(
+            f'Failed to download some files after {maxx} tries. Quit.'
+        )
+
     times, intensities = [], []
 
-    # Download the files and handle potential file corruption.
-    # Redownload the file if it is corrupted.
     for f in files:
-        attempt_number = 1
-        while attempt_number <= file_io.MAX_DOWNLOAD_ATTEMPTS:
-            try:
-                m = sunpy.map.Map(f)
-                break
-            except IOError as e: # File corruption, attempt redownload.
-                print(e)
-                print(f'FITS read error on attempt {attempt_number}.\
-                     Deleting file and retrying download.')
-                f = file_io.redownload_file(f)
-                continue
-        # This is only True if the except block is executed for all attempts.
-        if attempt_number > file_io.MAX_DOWNLOAD_ATTEMPTS:
-            print('Exceeded maximum number of attempts. Exitting.')
-            file_io.sys.exit(1)
+        m = sunpy.map.Map(f.file)
 
         bl, tr = get_subregion_corners(m, center, radius)
         subm = m.submap(bottom_left=bl, top_right=tr)
@@ -445,8 +450,8 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
 
     if fig is None:
         fig, ax = plt.subplots(figsize=(12,4))
-    
-    line = ax.plot(*lightcurve_converted, **plot_kwargs)
+
+    _ = ax.plot(*lightcurve_converted, **plot_kwargs)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     ax.xaxis.set_minor_locator(mdates.MinuteLocator(interval=1))
     ax.tick_params(which='major', direction='in')
@@ -487,9 +492,6 @@ def process_observation(obs):
     """
 
     start_date = obs['start_time'].split('T')[0].replace('-', '')
-    end_date = obs['end_time'].split('T')[0].replace('-', '')
-    file_io.make_directories(start_date)
-    file_io.make_directories(end_date)
     lightcurves_dir = file_io.LIGHTCURVES_DIR_FORMAT.format(date=start_date)
     images_dir = file_io.IMAGES_DIR_FORMAT.format(date=start_date)
     print(f'Generating plots for {obs["start_time"].replace("T", " ")} through {obs["end_time"].replace("T", " ")}')
@@ -516,7 +518,7 @@ def process_observation(obs):
         obs_map = get_map(wavelength, obs['map_time'])
         map_ax = fig.add_subplot(gs_maps[0,0], projection=obs_map)
         fig, map_ax = plot_map(obs_map, fig, map_ax, title='Full disk')
-        reg = add_region(obs_map, map_ax, obs['center'], obs['radius'],
+        _ = add_region(obs_map, map_ax, obs['center'], obs['radius'],
             label='Region', color=COLORMAP[wavelength])
 
         # Make the submap around the region of interest.
@@ -524,16 +526,16 @@ def process_observation(obs):
         submap_ax = fig.add_subplot(gs_maps[0,1], projection=obs_submap)
         fig, submap_ax = plot_map(obs_submap, fig, submap_ax,
             title=f'Selected region: {obs["center"]}, r={obs["radius"]}')
-        submap_reg = add_region(obs_submap, submap_ax, obs['center'], obs['radius'],
+        _ = add_region(obs_submap, submap_ax, obs['center'], obs['radius'],
             alpha=1, label='Region', color=COLORMAP[wavelength])
-        
+
         csv_file = f'{lightcurves_dir}lc_{startt}-{endt}_{wavelength}_N{obs["N"]}_{obs["name"]}.csv'
         if file_io.os.path.exists(csv_file):
             lightcurve = file_io.read_lightcurves(csv_file)
         else:
             # Then make the lightcurve.
             lightcurve = make_lightcurve(obs['start_time'], obs['end_time'], wavelength, obs['center'], obs['radius'])
-        
+
         bc, N = utils.boxcar_average(lightcurve[1], obs['N'])
         lightcurve_bc = (lightcurve[0], bc)
         lightcurve_detrended = (lightcurve[0], lightcurve[1] - lightcurve_bc[1])
