@@ -1,3 +1,5 @@
+import typing
+
 import sunpy.map
 import astropy.units as u
 import astropy.time
@@ -324,20 +326,25 @@ def get_region_data(map_obj, reg, fill_val=0, b_full_size=False):
     return reg_data
 
 
-def make_lightcurve(
+class Lightcurve(typing.NamedTuple):
+    t: list[float]
+    y: list[float]
+    exposure_times: list[u.Quantity]
+
+
+def make_lightcurve_and_download(
     start_time: str | astropy.time.Time,
     end_time: str | astropy.time.Time,
     wavelength: int | u.Quantity,
     center: tuple[float, float],
     radius: float
-) -> tuple[list[float], list[float]]:
+) -> Lightcurve:
     """
-    Obtain the lightcurve data for the specified parameters
-    for the given region. Currently, the intensities are
-    **not** normalized in any way. The units/scale is
-    arbitrary. There is a built-in procedure in the event
-    that a FITS file is corrupted. It will delete the
-    corrupted file and attempt to redownload it.
+    Download proper FITS files given time range and wavelength into directory structure.
+    Then, construct lightcurve for the specified region.
+    Currently, the intensities are **not** normalized in any way;
+    the lightcurve scale is arbitrary.
+    Downloads are retried `file_io.MAX_DOWNLOAD_ATTEMPTS` times.
 
     Parameters
     ----------
@@ -356,11 +363,13 @@ def make_lightcurve(
 
     Returns
     -------
-    tuple[list[float], list[float]]
-    times : list
-        The times for each data point.
-    intensities : list
-        The lightcurve values at each time.
+    Lightcurve NamedTuple
+        t : list[float]
+            The times for each data point.
+        y : list[float]
+            The lightcurve values at each time.
+        exposure_times : list[u.Quantity]
+            Exposure time of each point.
     """
 
     print('Generating light curve data.')
@@ -380,10 +389,40 @@ def make_lightcurve(
             f'Failed to download some files after {maxx} tries. Quit.'
         )
 
-    times, intensities = [], []
+    return make_lightcurve([f.file for f in files], center, radius)
 
+
+def make_lightcurve(
+    files: list[file_io.air.DownloadResult],
+    center: tuple[float, float],
+    radius: float
+) -> Lightcurve:
+    '''
+    Construct lightcurve for the specified region.
+
+    Parameters
+    ----------
+    files : list[str]
+        The FITS files to load into `sunpy.map.Map`s
+    center : tuple[float, float]
+        Coordinates for the region center, (x,y), in arcseconds.
+    radius : float
+        The radius of the circular region.
+
+    Returns
+    -------
+    Lightcurve NamedTuple
+        t : list[float]
+            The times for each data point.
+        y : list[float]
+            The lightcurve values at each time.
+        exposure_times : list[u.Quantity]
+            Exposure time of each point.
+    '''
+    times, intensities = [], []
+    exposure_times = []
     for f in files:
-        m = sunpy.map.Map(f.file)
+        m = sunpy.map.Map(f)
 
         bl, tr = get_subregion_corners(m, center, radius)
         subm = m.submap(bottom_left=bl, top_right=tr)
@@ -394,8 +433,9 @@ def make_lightcurve(
         time_str = m.date.value#.split('.')[0] # Remove the milliseconds
         times.append(convert.str_to_epoch(time_str))
         intensities.append(np.sum(reg_data))
+        exposure_times.append(m.exposure_time)
 
-    return times, intensities
+    return Lightcurve(t=times, y=intensities, exposure_times=exposure_times)
 
 
 def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='', **plot_kwargs):
@@ -406,8 +446,8 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
 
     Parameters
     ----------
-    lightcurve : tuple
-        Contains the lightcurve data in the format (times, data),
+    lightcurve : tuple | Lightcurve
+        Contains the lightcurve data in the format (times, data, [exposure_times]),
         where times and data are in a format (i.e. list or np.ndarray)
         that is compatible with matplotlib.axes plotting. The elements
         in times should be of type str.
