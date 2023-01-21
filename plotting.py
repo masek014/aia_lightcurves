@@ -1,3 +1,4 @@
+import pathlib
 import regions
 import sunpy.map
 import astropy.time
@@ -13,6 +14,7 @@ from sunpy.net import attrs as a
 from astropy.coordinates import SkyCoord
 
 from . import boxcar, file_io, lightcurves as lc
+from .data_classes import Lightcurve
 np = boxcar.np
 
 
@@ -31,8 +33,9 @@ AIA_COLORMAP = {
 } # Sets compatible region colors for each AIA filter
 
 
-def apply_style(style_sheet):
-    plt.style.use(file_io.os.path.dirname(file_io.os.path.realpath(__file__)) + f'/styles/{style_sheet}')
+def apply_style(style_sheet: str):
+    p = pathlib.Path(__file__)
+    plt.style.use(p.parent / f'styles/{style_sheet}')
 
 
 def apply_colorbar(
@@ -307,7 +310,7 @@ def get_region_data(
 
 
 def plot_lightcurve(
-    lightcurve: lc.Lightcurve,
+    lightcurve: Lightcurve,
     fig: matplotlib.figure.Figure = None,
     ax: matplotlib.axes = None,
     **plot_kwargs
@@ -383,7 +386,7 @@ def make_overview_gridspec(
 def plot_overview(
     map_obj: sunpy.map.Map,
     region: regions.SkyRegion,
-    lightcurve: lc.Lightcurve,
+    lightcurve: Lightcurve,
     boxcar_width: int = None,
     map_kwargs: dict = {},
     lc_kwargs: dict = {},
@@ -400,7 +403,7 @@ def plot_overview(
         The map to plotted.
     region : regions.SkyRegion
         The region of interest.
-    lightcurve : lc.Lightcurve
+    lightcurve : Lightcurve
         The lightcurve corresponding to the region.
     boxcar_width : int
         The width over which the lightcurve will be averaged.
@@ -477,7 +480,7 @@ def plot_overview(
     return fig, gs_maps, gs_lc
 
 
-def summary_lightcurves(dat: lc.Lightcurve) -> dict[str, object]:
+def summary_lightcurves(dat: Lightcurve) -> dict[str, object]:
     
     apply_style('summary.mplstyle')
 

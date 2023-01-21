@@ -1,18 +1,10 @@
-import typing
-
 import sunpy
-import regions
 import numpy as np
 import astropy.time
 import astropy.units as u
 
 from . import file_io, plotting, boxcar
-
-
-class Lightcurve(typing.NamedTuple):
-    t: list[float]
-    y: list[float]
-    exposure_times: list[u.Quantity]
+from .data_classes import Lightcurve, RegionCanister
 
 
 def sort_by_time(dat: Lightcurve) -> Lightcurve:
@@ -29,7 +21,7 @@ def download_and_make_lightcurve(
     start_time: str | astropy.time.Time,
     end_time: str | astropy.time.Time,
     wavelength: int | u.Quantity,
-    region: typing.Type[regions.SkyRegion]
+    region_can: RegionCanister
 ) -> Lightcurve:
     """
     Download proper FITS files given time range and wavelength into directory structure.
@@ -46,15 +38,11 @@ def download_and_make_lightcurve(
         The end time of the observation.
     wavelength : int | u.Angstrom
         The wavelength of interest.
-    center : tuple[float, float]
-        Coordinates for the region center, (x,y), in arcseconds.
-    radius : float
-        The radius of the circular region.
 
     Returns
     -------
     Lightcurve NamedTuple
-        t : list[float]
+        t : list[astropy.time.Time]
             The times for each data point.
         y : list[float]
             The lightcurve values at each time.
@@ -79,13 +67,13 @@ def download_and_make_lightcurve(
             f'Failed to download some files after {maxx} tries. Quit.'
         )
 
-    return make_lightcurve([f.file for f in files], region)
+    return make_lightcurve([f.file for f in files], region_can)
 
 
 def make_lightcurve(
     files: list[file_io.air.DownloadResult],
-    region: typing.Type[regions.SkyRegion],
-    time_format: str = 'unix'
+    region_can: RegionCanister,
+    time_format: str='unix'
 ) -> Lightcurve:
     """
     Construct lightcurve for the specified region.
@@ -94,8 +82,8 @@ def make_lightcurve(
     ----------
     files : list[str]
         The FITS files to load into `sunpy.map.Map`
-    region : regions.SkyRegion
-        The region for which the lightcurve will be made.
+    region_kwargs :
+        blah
     time_format : str
         Format for the times, compliant with
         astropy.time.Time objects.
@@ -103,21 +91,20 @@ def make_lightcurve(
     Returns
     -------
     Lightcurve NamedTuple
-        t : list[float]
+        t : list[astropy.time.Time]
             The times for each data point.
         y : list[float]
             The lightcurve values at each time.
         exposure_times : list[u.Quantity]
             Exposure time of each point.
     """
-    
     times = []
     intensities = []
     exposure_times = []
     
     for f in files:
-
         map_obj = sunpy.map.Map(f)
+        region = region_can.construct_given_map(map_=map_obj)
         submap_obj = plotting.make_submap(map_obj, region)
         reg_data = plotting.get_region_data(submap_obj, region)
 
@@ -128,7 +115,6 @@ def make_lightcurve(
         exposure_times.append(map_obj.exposure_time)
 
     times = astropy.time.Time(astropy.time.Time(times), format=time_format)
-
     return Lightcurve(t=times, y=intensities, exposure_times=exposure_times)
 
 
