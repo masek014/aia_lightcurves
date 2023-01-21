@@ -1,7 +1,7 @@
-astropy>=5.1.1
-matplotlib>=3.6.2
-numpy>=1.23.5
-parse>=1.19.0
-regions>=0.7
-requests>=2.28.1
-sunpy>=4.1.0
+astropy==5.1.1
+matplotlib==3.5.1
+numpy==1.21.5
+regions==0.7
+requests==2.25.1
+sunpy==4.1.0
+xmltodict==0.13.0

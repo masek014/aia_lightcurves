@@ -17,14 +17,16 @@ import requests.exceptions as rex
 import typing
 import xmltodict
 
-TIME_FMT = '%Y%m%d%H%M%S'
+DATE_FMT = '%Y%m%d'
+TIME_FMT = '%H%M%S'
+DATETIME_FMT = f'{DATE_FMT}{TIME_FMT}'
 
 @dataclass
 class Config:
     read_timeout: u.s
     debug: bool
 
-# configure this to be as you want
+# Configure this to be as you want.
 cfg = Config(10 << u.s, debug=False)
 def debug_print(*args, **kwargs):
     if cfg.debug:
@@ -127,7 +129,7 @@ def build_query_string(start: astropy.time.Time, end: astropy.time.Time, wavelen
     given start, end times and a wavelength,
     return a properly-formatted AIA XML query string.
     '''
-    start_str, end_str = start.strftime(TIME_FMT), end.strftime(TIME_FMT)
+    start_str, end_str = start.strftime(DATETIME_FMT), end.strftime(DATETIME_FMT)
     wav_num = wavelength.to(u.Angstrom).value
 
     return afx.QUERY_FMT.format(
