@@ -14,10 +14,17 @@ class Lightcurve(typing.NamedTuple):
     exposure_times: list[u.Quantity]
 
 
-class RegionCanister(typing.NamedTuple):
-    kind: regions.SkyRegion | None=None
-    center: tuple[u.Quantity, u.Quantity] | None=None
-    constructor_kwargs: dict[str, object] | None=None
+class RegionCanister:
+    @u.quantity_input
+    def __init__(
+        self,
+        kind: regions.SkyRegion | None=None,
+        center: tuple[u.arcsec, u.arcsec] | None=None,
+        constructor_kwargs: dict[str, u.arcsec] | None=None
+    ):
+        self.kind = kind
+        self.center = center
+        self.constructor_kwargs = constructor_kwargs
 
     def construct_given_map(self, map_: sunpy.map.Map):
         return self.kind(
