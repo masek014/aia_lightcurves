@@ -43,12 +43,9 @@ def download_fits_parallel(
     end_time: astropy.time.Time,
     wavelengths: list[u.Angstrom],
     num_simultaneous_connections: int=5,
-    num_retries_for_failed: int=10,
-    print_debug_messages: bool=False
+    num_retries_for_failed: int=10
 ) -> list[air.DownloadResult]:
     ''' download fits in parallel using raw HTTP requests + XML '''
-    orig_debug = air.cfg.debug
-    air.cfg.debug = print_debug_messages
 
     date = start_time.strftime(air.DATE_FMT)
     make_directories(date=date)
@@ -62,7 +59,6 @@ def download_fits_parallel(
         attempts=num_retries_for_failed
     )
 
-    air.cfg.debug = orig_debug
     return files
 
 
@@ -153,7 +149,8 @@ def read_lightcurves(save_path):
     return lightcurve
 
 
-def save_lightcurves(arrays, save_path):
+LcArrays = tuple[np.ndarray | u.Quantity, np.ndarray | u.Quantity]
+def save_lightcurves(arrays: LcArrays, save_path: str):
     """
     Save lightcurve data to the specified CSV file.
 
@@ -166,7 +163,12 @@ def save_lightcurves(arrays, save_path):
     save_path : str
         Path to the input CSV file.
     """
-
     print(f'Saving lightcurve data to \'{save_path}\'')
-    a = np.vstack(arrays).T
+    cleaned = []
+    for a in arrays:
+        if isinstance(a[0], u.Quantity):
+            cleaned.append([v.value for v in a])
+        else:
+            cleaned.append(a)
+    a = np.array(cleaned).T
     np.savetxt(save_path, a, delimiter=',', fmt='%s')
