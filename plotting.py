@@ -8,14 +8,15 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.units as munits
 import matplotlib.gridspec as gridspec
+import numpy as np
+import numpy.typing
 
 from datetime import datetime, timedelta
 from sunpy.net import attrs as a
 from astropy.coordinates import SkyCoord
 
 from . import boxcar, file_io, lightcurves as lc
-from .data_classes import Lightcurve
-np = boxcar.np
+from .data_classes import Lightcurve, RegionCanister
 
 
 MAP_X_LABEL = 'X (arcseconds)'
@@ -516,3 +517,72 @@ def summary_lightcurves(dat: Lightcurve) -> dict[str, object]:
         'norm_ax': norm_ax,
         'exp_ax': exp_ax
     }
+
+
+InsetRet = dict[str, matplotlib.figure.Figure | matplotlib.axes.Axes]
+def plot_inset_region(
+     fits_path: str | pathlib.Path,
+     region_can: RegionCanister,
+     fig: matplotlib.figure.Figure | None=None,
+     reg_kw: dict[str, object] | None=None,
+     inset_position: numpy.typing.ArrayLike | None=None
+) -> InsetRet:
+
+     m = sunpy.map.Map(fits_path)
+
+     pad_mult = 1.5
+     hw = region_can.half_width()
+     bottom_left = SkyCoord(
+          *(region_can.center - hw*pad_mult),
+          frame=m.coordinate_frame
+     )
+     top_right = SkyCoord(
+          *(region_can.center + hw*pad_mult) << u.arcsec,
+          frame=m.coordinate_frame
+     )
+
+     subm = m.submap(bottom_left=bottom_left, top_right=top_right)
+
+     fig = fig or plt.gcf()
+     ax = fig.add_subplot(projection=m)
+     m.plot(axes=ax)
+     main_tick_col = 'gray'
+     ax.coords.frame.set_color(main_tick_col)
+     for crd in ax.coords:
+          crd.tick_params(color=main_tick_col)
+
+     pos = inset_position or [0.35, 0.35, 0.3, 0.3]
+     axins = ax.inset_axes(pos, projection=subm)
+     subm.plot(annotate=False, axes=axins, title=False)
+
+     skc = SkyCoord(*region_can.center, frame=m.coordinate_frame)
+     reg = region_can.kind(
+          skc,
+          **region_can.constructor_kwargs
+     )
+     default = dict(lw=2, color='lightblue', ls='dashed')
+     reg_kw = default | (reg_kw or dict())
+     add_region(map_obj=m, ax=ax, region=reg, **reg_kw)
+     add_region(map_obj=subm, ax=axins, region=reg, **reg_kw)
+
+     indic_col = (1, 1, 1, 0.8)
+     x0, y0 = bottom_left.to_pixel(m.wcs)
+     x1, y1 = top_right.to_pixel(m.wcs)
+     ax.indicate_inset(
+          bounds=(x0, y0, x1 - x0, y1 - y0),
+          inset_ax=axins,
+          edgecolor=indic_col,
+          linewidth=2,
+          alpha=indic_col[-1]
+     )
+
+     for crd in axins.coords:
+          crd.set_ticks_visible(False)
+          crd.set_ticklabel_visible(False)
+     axins.set(
+          title=' ', xlabel=' ', ylabel=' ',
+     )
+     axins.coords.frame.set_color(indic_col)
+     axins.grid(False)
+
+     return dict(fig=fig, ax=ax, axins=axins)
