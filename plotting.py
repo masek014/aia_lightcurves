@@ -311,8 +311,8 @@ def get_region_data(
 
 def plot_lightcurve(
     lightcurve: Lightcurve,
-    fig: matplotlib.figure.Figure = None,
-    ax: matplotlib.axes = None,
+    fig: matplotlib.figure.Figure | None= None,
+    ax: matplotlib.axes.Axes | None= None,
     **plot_kwargs
 ) -> tuple[matplotlib.figure.Figure, matplotlib.axes]:
     """
@@ -327,10 +327,10 @@ def plot_lightcurve(
         where times and data are in a format (i.e. list or np.ndarray)
         that is compatible with matplotlib.axes plotting. The elements
         in times should be of type str.
-    fig : matplotlib.figure.Figure
+    fig : matplotlib.figure.Figure | None
         If a figure object is provided, the provided lightcurve data
         will be added to the existing fig object.
-    ax : matplotlib.axes
+    ax : matplotlib.axes | None
         If an axes object is provided, the provided lightcurve data
         will be added to the existing ax object.
     **plot_kwargs
@@ -358,7 +358,7 @@ def plot_lightcurve(
     times_converted = [t.datetime for t in lightcurve[0]]
     lightcurve_converted = (times_converted, lightcurve[1])
 
-    if fig is None:
+    if fig is None and ax is None:
         apply_style('lightcurve.mplstyle')
         fig, ax = plt.subplots()
 
@@ -366,7 +366,7 @@ def plot_lightcurve(
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     ax.xaxis.set_minor_locator(mdates.MinuteLocator(interval=1))
 
-    return fig, ax
+    return (fig or plt.gcf()), ax
 
 
 def make_overview_gridspec(
