@@ -8,12 +8,14 @@ import astropy.units as u
 import astropy.time
 import copy
 import functools
+import logging
 import math
 import multiprocessing as mp
-import multiprocessing.dummy
+import multiprocessing.dummy as mpdummy
 import os
 import requests
 import requests.exceptions as rex
+import sys
 import typing
 import xmltodict
 
@@ -24,13 +26,11 @@ DATETIME_FMT = f'{DATE_FMT}{TIME_FMT}'
 @dataclass
 class Config:
     read_timeout: u.s
-    debug: bool
 
 # Configure this to be as you want.
-cfg = Config(10 << u.s, debug=False)
+cfg = Config(10 << u.s)
 def debug_print(*args, **kwargs):
-    if cfg.debug:
-        print(*args, **kwargs)
+    logging.info(kwargs.get('sep', ' ').join(args), **kwargs)
 
 class DownloadResult(typing.NamedTuple):
     url: str
@@ -70,7 +70,7 @@ def download_aia_between(
     initial_num = len(all_urls)
     while tries < attempts:
         debug_print('start try downloads')
-        with mp.dummy.Pool(processes=num_jobs) as p:
+        with mpdummy.Pool(processes=num_jobs) as p:
             cur_downloaded = p.map(
                 download_wrapper,
                 all_urls,
@@ -85,8 +85,7 @@ def download_aia_between(
 
         all_successful = (failed == [])
         if all_successful: break
-        elif cfg.debug:
-            debug_print('some failed ones:\n', failed)
+        debug_print('some failed ones:\n', failed)
 
         retry = [res.url for res in failed]
         failed = len(retry)
@@ -265,5 +264,5 @@ def timed_test():
 
 
 if __name__ == '__main__':
-    cfg.debug = True
+    logging.basicConfig(level=logging.WARNING)
     timed_test()

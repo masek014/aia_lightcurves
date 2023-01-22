@@ -137,7 +137,6 @@ class Observation():
                 wavelengths=[wavelength],
                 num_simultaneous_connections=8,
                 num_retries_for_failed=file_io.MAX_DOWNLOAD_ATTEMPTS,
-                print_debug_messages=False,
             )
 
             reference_map = plotting.sunpy.map.Map(files[0].file)
