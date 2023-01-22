@@ -30,7 +30,7 @@ class Config:
 # Configure this to be as you want.
 cfg = Config(10 << u.s)
 def debug_print(*args, **kwargs):
-    logging.info(kwargs.get('sep', ' ').join(args), **kwargs)
+    logging.info(kwargs.get('sep', ' ').join(str(s) for s in args), **kwargs)
 
 class DownloadResult(typing.NamedTuple):
     url: str
