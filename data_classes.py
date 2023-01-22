@@ -31,3 +31,15 @@ class RegionCanister(typing.NamedTuple):
             (self.center is not None) and
             (self.constructor_kwargs is not None)
         )
+
+    @u.quantity_input
+    def half_width(self) -> u.arcsec:
+        kw = self.constructor_kwargs
+        if 'radius' in kw:
+            return kw['radius']
+        if 'width' in kw:
+            return max(kw['width'], kw['height'])
+        if 'outer_width' in kw:
+            return max(kw['outer_width'], kw['outer_height'])
+
+        raise ValueError("Specified SkyRegion does not have a well-defined half-width")
