@@ -1,4 +1,4 @@
-font.size           : 16
+font.size           : 20
 legend.fontsize     : 12
 
 figure.figsize      : 8, 8
@@ -6,7 +6,7 @@ figure.dpi          : 240
 savefig.dpi         : 240
 savefig.bbox        : tight
 
-axes.titlesize      : 16
+axes.titlesize      : 20
 axes.titlepad       : 8
 axes.grid           : False
 
@@ -18,6 +18,7 @@ xtick.minor.width   : 1
 xtick.major.pad     : 10
 xtick.minor.pad     : 10
 xtick.direction     : in
+xtick.color         : gray
 
 ytick.minor.visible : True
 ytick.major.size    : 10
@@ -27,3 +28,4 @@ ytick.minor.width   : 1
 ytick.major.pad     : 10
 ytick.minor.pad     : 10
 ytick.direction     : in
+ytick.color         : gray

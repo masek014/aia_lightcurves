@@ -40,9 +40,8 @@ def apply_style(style_sheet: str):
 
 
 def apply_colorbar(
-    fig: matplotlib.figure.Figure,
-    ax: matplotlib.axes,
-    width: float = 0.005,
+    ax: matplotlib.axes.Axes,
+    width: float = 0.01,
     **kwargs
 ) -> tuple[matplotlib.axes, matplotlib.colorbar.Colorbar]:
     """
@@ -52,9 +51,7 @@ def apply_colorbar(
     
     Parameters
     ----------
-    fig : matplotlib.figure.Figure
-        The figure to which to colorbar will be added.
-    ax : matplotlib.axes
+    ax : matplotlib.axes.Axes
         The axes to which the colorbar is applied.
     width : float
         The colorbar width as a fraction of the plot width.
@@ -73,11 +70,7 @@ def apply_colorbar(
     }
     kwargs = {**default_kwargs, **kwargs}
 
-    cbax = fig.add_axes([
-        ax.get_position().x1+0.005, # Set spacing between the plot and cb
-        ax.get_position().y0, # Set bottom of cb to bottom of the plot
-        width, # Set the width of the cb as a fraction of the plot width
-        ax.get_position().height]) # Set the height of cb to the plot height
+    cbax = ax.inset_axes([1.01, 0, width, 1])
     cb = matplotlib.colorbar.ColorbarBase(cbax, **kwargs)
     cbax.tick_params(which='both', axis='y', direction='out')
 
@@ -137,7 +130,7 @@ def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
         If an axes object is provided, the provided lightcurve data
         will be added to the existing ax object.
     cb_kwargs
-        Keywork parameters for the colorbar (norm, cmap, etc.).
+        Keyword parameters for the colorbar (norm, cmap, etc.).
 
     Returns
     -------
@@ -149,13 +142,13 @@ def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
         or the updated axes object if it was provided.
     """
 
-    
     default_kwargs = {
-        'cmap': map_obj.cmap.reversed(),
-        'norm': matplotlib.colors.PowerNorm(0, map_obj.max())
+        'cmap': map_obj.plot_settings['cmap'],
+        'norm': map_obj.plot_settings['norm'],
+        'label': 'Normalized Intensity'
     }
     cb_kwargs = {**default_kwargs, **cb_kwargs}
-    
+
     if fig is None:
         apply_style('map.mplstyle')
         fig, ax = plt.subplots(
@@ -164,11 +157,12 @@ def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
         )
 
     map_obj.plot(axes=ax, **cb_kwargs)
-    map_obj.draw_limb(color='black')
+    map_obj.draw_limb(color='black', zorder=1)
 
     ax.set(xlabel=MAP_X_LABEL, ylabel=MAP_Y_LABEL)
     ax.grid(False)
-    cbax, cb = apply_colorbar(fig, ax, 0.01, label='Intensity', **cb_kwargs)
+    # TODO: Figure out why the default_kwargs messes up the submaps in the overview. This happens when the kwargs are pass to the colorbar. Colorbars are removed for now.
+    # cbax, cb = apply_colorbar(ax, 0.02, **cb_kwargs)
 
     return fig, ax
 
@@ -524,6 +518,7 @@ def plot_inset_region(
      fits_path: str | pathlib.Path,
      region_can: RegionCanister,
      fig: matplotlib.figure.Figure | None=None,
+     ax: matplotlib.axes.Axes | None=None,
      reg_kw: dict[str, object] | None=None,
      inset_position: numpy.typing.ArrayLike | None=None
 ) -> InsetRet:
@@ -544,8 +539,10 @@ def plot_inset_region(
      subm = m.submap(bottom_left=bottom_left, top_right=top_right)
 
      fig = fig or plt.gcf()
-     ax = fig.add_subplot(projection=m)
-     m.plot(axes=ax)
+     if ax is None:
+        ax = fig.add_subplot(projection=m)
+        m.plot(axes=ax)
+
      main_tick_col = 'gray'
      ax.coords.frame.set_color(main_tick_col)
      for crd in ax.coords:

@@ -207,18 +207,16 @@ class Observation():
         Generates the overview plots for the given wavelength.
         """
 
-        # TODO: Make the map_kwargs and lc_kwargs parameters.
-        map_kwargs = dict(
-            norm = plotting.matplotlib.colors.LogNorm(1e1, 1e4)
-        )
         fn = self.data[wavelength]['files'][0]
         m = self.data[wavelength]['map']
+        
+        # TODO: Make the map_kwargs and lc_kwargs parameters.
         plotting.plot_overview(
             m,
             self.region_can.construct_given_map(map_=m),
             self.data[wavelength]['lightcurve'],
             self.boxcar_width,
-            map_kwargs
+            # map_kwargs
         )
 
         fig_path = self._build_figure_path(wavelength, 'overview')

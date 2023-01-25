@@ -115,7 +115,8 @@ def make_lightcurve(
         exposure_times.append(map_obj.exposure_time)
 
     times = astropy.time.Time(astropy.time.Time(times), format=time_format)
-    return Lightcurve(t=times, y=intensities, exposure_times=exposure_times)
+    lc = Lightcurve(t=times, y=intensities, exposure_times=exposure_times)
+    return sort_by_time(lc)
 
 
 def make_averaged_lightcurve(
