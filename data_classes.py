@@ -45,8 +45,8 @@ class RegionCanister:
         if 'radius' in kw:
             return kw['radius']
         if 'width' in kw:
-            return max(kw['width'], kw['height'])
+            return max(kw['width'], kw['height']) / 2
         if 'outer_width' in kw:
-            return max(kw['outer_width'], kw['outer_height'])
+            return max(kw['outer_width'], kw['outer_height']) / 2
 
         raise ValueError("Specified SkyRegion does not have a well-defined half-width")
