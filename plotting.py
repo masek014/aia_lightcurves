@@ -1,57 +1,57 @@
-import typing
-
+import pathlib
+import regions
 import sunpy.map
-import astropy.units as u
 import astropy.time
+import astropy.units as u
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import matplotlib.units as munits
 import matplotlib.gridspec as gridspec
+import numpy as np
+import numpy.typing
 
+from datetime import datetime, timedelta
 from sunpy.net import attrs as a
 from astropy.coordinates import SkyCoord
-from regions import CircleSkyRegion
 
-from . import convert, file_io, utils
-np = utils.np
-
-plt.rcParams['font.size'] = 8
+from . import boxcar, file_io, lightcurves as lc
+from .data_classes import Lightcurve, RegionCanister
 
 
 MAP_X_LABEL = 'X (arcseconds)'
 MAP_Y_LABEL = 'Y (arcseconds)'
-COLORMAP = {
-    94:'red', 131:'red', 171:'cyan', 193:'cyan', 211:'cyan',
-    304:'cyan', 335:'red', 1600:'red', 1700:'cyan'
+AIA_COLORMAP = {
+    94  : 'red',
+    131 : 'red',
+    171 : 'cyan',
+    193 : 'cyan',
+    211 : 'cyan',
+    304 : 'cyan',
+    335 : 'red',
+    1600: 'red',
+    1700: 'cyan'
 } # Sets compatible region colors for each AIA filter
 
 
-def add_minor_ticks(ax):
+def apply_style(style_sheet: str):
+    p = pathlib.Path(__file__)
+    plt.style.use(p.parent / f'styles/{style_sheet}')
+
+
+def apply_colorbar(
+    ax: matplotlib.axes.Axes,
+    width: float = 0.01,
+    **kwargs
+) -> tuple[matplotlib.axes, matplotlib.colorbar.Colorbar]:
     """
-    Adds minor ticks to the plot on the provided axes.
-
-    Parameters
-    ----------
-    ax : matplotlib axes object
-        The axes to which ticks will be added.
-    """
-
-    (ax.coords[0]).display_minor_ticks(True)
-    (ax.coords[0]).set_minor_frequency(5)
-    (ax.coords[1]).display_minor_ticks(True)
-    (ax.coords[1]).set_minor_frequency(5)
-    ax.tick_params(which='minor', length=1.5)
-
-
-def apply_colorbar(fig, ax, width=0.005, **kwargs):
-    """
-    Adds a colorbar to the map plot.
+    Adds a custom colorbar to the figure.
     A new axes object is created to house the colorbar.
+    Inspired by: https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
+    
     Parameters
     ----------
-    fig : matplotlib figure
-        The figure to which to colorbar will be added.
-    ax : matplotlib axes
+    ax : matplotlib.axes.Axes
         The axes to which the colorbar is applied.
     width : float
         The colorbar width as a fraction of the plot width.
@@ -70,87 +70,58 @@ def apply_colorbar(fig, ax, width=0.005, **kwargs):
     }
     kwargs = {**default_kwargs, **kwargs}
 
-    # Create a custom colorbar.
-    # https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
-    cbax = fig.add_axes([
-        ax.get_position().x1+0.005, # Set spacing between the plot and cb
-        ax.get_position().y0, # Set bottom of cb to bottom of the plot
-        width, # Set the width of the cb as a fraction of the plot width
-        ax.get_position().height]) # Set the height of cb to the plot height
+    cbax = ax.inset_axes([1.01, 0, width, 1])
     cb = matplotlib.colorbar.ColorbarBase(cbax, **kwargs)
+    cbax.tick_params(which='both', axis='y', direction='out')
 
     return cbax, cb
 
 
-def get_map(aia_wavelength, map_time):
+# TODO: Do we need this?
+def get_map(
+    wavelength: u.Quantity,
+    map_time: astropy.time.Time
+) -> sunpy.map.Map:
     """
     Query and return the most recent AIA
     image that Sunpy.Fido can get.
     
     Parameters
     ----------
-    aia_wavelength : int
+    wavelength : astropy.units.Quantity
         The desired AIA wavelength.
-    map_time : str
+    map_time : astropy.time.Time
         Date and time of desired image formatted as
         '%Y-%m-%dT%H:%M:%S.%f'.
 
     Returns
     -------
-    Sunpy generic map.
+    aia_map : sunpy.map.Map
     """
 
-    DATETIME_FORMAT = convert.DATETIME_FORMAT
+    past_time = map_time - timedelta(minutes=10)
+    info = ( a.Instrument('aia') & a.Wavelength(wavelength) )
+    result = file_io.Fido.search(a.Time(past_time, map_time), info)
+    file_download = file_io.Fido.fetch(
+        result[0, -1],
+        site='ROB',
+        progress=False
+    )
+
+    aia_map = sunpy.map.Map(file_download[-1])
     
-    info = (a.Instrument('aia') & a.Wavelength(aia_wavelength*u.angstrom))
-    look_back = {'minutes': 30}
-    
-    map_dt = convert.datetime.strptime(map_time, DATETIME_FORMAT+'.%f')
-    past = map_dt - convert.timedelta(**look_back)
-    past_date = past.strftime(DATETIME_FORMAT)
-    startt = str(past_date)
-    endt = str(map_time)
-
-    result = file_io.Fido.search(a.Time(startt, endt), info)
-    file_download = file_io.Fido.fetch(result[0, -1], site='ROB', progress=False)
-
-    data_map = sunpy.map.Map(file_download[-1])
-    
-    return data_map
+    return aia_map
 
 
-def get_brightest_skycoord(map_obj):
+def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
     """
-    Return the coordinate of the brightest coordinate as a SkyCoord.
-
-    Parameters
-    ----------
-    map_obj : Sunpy map
-        The input map.
-    
-    Returns
-    -------
-    max_coords : SkyCoord
-        The coordinate of the brightest point on the map.
-        In units of arcseconds.
-    """
-    
-    max_coords = utils.np.where(map_obj._data==utils.np.max(map_obj._data)) # row, column
-    max_coords = (max_coords[1][0], max_coords[0][0]) # column, row (x, y)
-    max_coords = map_obj.wcs.pixel_to_world(*max_coords)
-
-    return max_coords
-
-
-def plot_map(map_obj, fig=None, ax=None, title='', **cb_kwargs):
-    """
-    Plot the provided Sunpy map.
+    Plot the provided sunpy.map.Map.
     If fig and ax are provided, the map will be added to them.
     Otherwise, new fig and ax objects will be created.
 
     Parameters
     ----------
-    map_obj : Sunpy map
+    map_obj : sunpy.map.Map
         The map of interest.
     fig : matplotlib figure object
         If a figure object is provided, the provided lightcurve data
@@ -158,10 +129,8 @@ def plot_map(map_obj, fig=None, ax=None, title='', **cb_kwargs):
     ax : matplotlib axes object
         If an axes object is provided, the provided lightcurve data
         will be added to the existing ax object.
-    title : str
-        The title string.
     cb_kwargs
-        Keywork parameters for the colorbar (norm, cmap, etc.).
+        Keyword parameters for the colorbar (norm, cmap, etc.).
 
     Returns
     -------
@@ -173,103 +142,102 @@ def plot_map(map_obj, fig=None, ax=None, title='', **cb_kwargs):
         or the updated axes object if it was provided.
     """
 
-    defaultKwargs = {
-        'cmap': map_obj.cmap.reversed(),
-        'norm': matplotlib.colors.LogNorm(10, map_obj.max())
+    default_kwargs = {
+        'cmap': map_obj.plot_settings['cmap'],
+        'norm': map_obj.plot_settings['norm'],
+        'label': 'Normalized Intensity'
     }
-    cb_kwargs = {**defaultKwargs, **cb_kwargs}
+    cb_kwargs = {**default_kwargs, **cb_kwargs}
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(12,12), subplot_kw={'projection':map_obj})
+    if fig is None:
+        apply_style('map.mplstyle')
+        fig, ax = plt.subplots(
+            figsize=(12,12),
+            subplot_kw={'projection':map_obj}
+        )
 
-    map_obj.plot(axes=ax, title=title, **cb_kwargs)
-    map_obj.draw_limb(color='black')
+    map_obj.plot(axes=ax, **cb_kwargs)
+    map_obj.draw_limb(color='black', zorder=1)
 
-    ax.tick_params(which='major', direction='in')
-    ax.grid(False)
     ax.set(xlabel=MAP_X_LABEL, ylabel=MAP_Y_LABEL)
-    add_minor_ticks(ax)
-    cbax, cb = apply_colorbar(fig, ax, 0.01, label='Intensity', **cb_kwargs)
+    ax.grid(False)
+    # TODO: Figure out why the default_kwargs messes up the submaps in the overview. This happens when the kwargs are pass to the colorbar. Colorbars are removed for now.
+    # cbax, cb = apply_colorbar(ax, 0.02, **cb_kwargs)
 
     return fig, ax
 
 
-def make_submap(obs_map, center, radius):
+def make_submap(
+    map_obj: sunpy.map.Map,
+    region: regions.SkyRegion
+) -> sunpy.map.Map:
     """
-    Creates a submap around the provided circular region based on obs_map.
-    Center is a tuple of (x,y), in arcseconds
-    radius is the radius in arcseconds.
+    Creates a submap around the provided region based on map_obj.
 
     Parameters
     ----------
-    obs_map : Sunpy map
-        The original map that the submap will be beased on.
-    center : tuple
-        The center point coordinates of the circular region.
-        In units of arcseconds.
-    radius : float
-        The radius of the circular region.
-        In units of arcseconds.
+    obs_map : sunpy.map.Map
+        The original map that the submap will be based on.
+    region : regions.SkyRegion
+        The region around which the submap will be made.
 
     Returns
     -------
-    obs_submap : Sunpy map
+    submap_obj : sunpy.map.Map
         The submap around the specified region.
     """
 
-    bl, tr = get_subregion_corners(obs_map, center, radius)
-    obs_submap = obs_map.submap(bottom_left=bl, top_right=tr)
+    bl, tr = get_subregion_corners(map_obj, region)
+    submap_obj = map_obj.submap(bottom_left=bl, top_right=tr)
 
-    return obs_submap
+    return submap_obj
 
 
-def add_region(map_obj, ax, center, radius, **kwargs):
+def add_region(
+    map_obj: sunpy.map.Map,
+    ax: plt.axes,
+    region: regions.SkyRegion,
+    **kwargs
+):
     """
-    Adds a circular region to the provided axes.
+    Adds the provided region to ax.
     
     Parameters
     ----------
-    map_obj : Sunpy map
+    map_obj : sunpy.map.Map
         The input map that the region is based on.
     ax : matplotlib axes object
         The axes on which the region will be drawn.
-    center : tuple
-        Coordinates for the region center, (x,y), in arcseconds.
-    radius : float
-        The radius of the circular region.
+    region : regions.SkyRegion
+        The region of interest to be drawn.
     **kwargs
         Style parameters of the plotted region.
-
-    Returns
-    -------
-    reg : CircleSkyRegion
-        Region object for the specified area.
     """
 
-    defaultKwargs = {'color': 'red', 'linestyle': 'dashed', 'linewidth': 1}
-    kwargs = {**defaultKwargs, **kwargs}
+    default_kwargs = {
+        'color': AIA_COLORMAP[map_obj._meta['wavelnth']],
+        'linestyle': 'dashed',
+        'linewidth': 2
+    }
+    kwargs = {**default_kwargs, **kwargs}
 
-    center_skycoord = SkyCoord(*center, unit='arcsecond', frame=map_obj.coordinate_frame)
-    reg = CircleSkyRegion(center_skycoord, radius*u.arcsecond)
-    reg_pixel = reg.to_pixel(map_obj.wcs)
-    reg_pixel.plot(ax=ax, **kwargs)
-
-    return reg
+    region_pixel = region.to_pixel(map_obj.wcs)
+    region_pixel.plot(ax=ax, **kwargs)
 
 
-def get_subregion_corners(map_obj, center, radius):
+def get_subregion_corners(
+    map_obj: sunpy.map.Map,
+    region: regions.SkyRegion
+) -> tuple[SkyCoord, SkyCoord]:
     """
     Obtain the bottom left and top right coordinates of the subregion
     specified by the provided coordinates.
 
     Parameters
     ----------
-    map_obj : Sunpy map
+    map_obj : sunpy.map.Map
         The input map that the region is based on.
-    center : tuple
-        Coordinates for the region center, (x,y), in arcseconds.
-    radius : float
-        The radius of the circular region.
+    region: regions.SkyRegion
     
     Returns
     -------
@@ -279,166 +247,69 @@ def get_subregion_corners(map_obj, center, radius):
         The top right point of the subregion.
     """
 
-    bl_x, bl_y = center[0] - radius, center[1] - radius
-    bl = SkyCoord(bl_x*u.arcsecond, bl_y*u.arcsecond, frame=map_obj.coordinate_frame)
+    mask = region.to_pixel(map_obj.wcs).to_mask()
+    xmin, xmax = mask.bbox.ixmin, mask.bbox.ixmax
+    ymin, ymax = mask.bbox.iymin, mask.bbox.iymax
 
-    tr_x, tr_y = center[0] + radius, center[1] + radius
-    tr = SkyCoord(tr_x*u.arcsecond, tr_y*u.arcsecond, frame=map_obj.coordinate_frame)
+    bl = regions.PixCoord(xmin, ymin).to_sky(map_obj.wcs)
+    tr = regions.PixCoord(xmax, ymax).to_sky(map_obj.wcs)
 
     return bl, tr
 
 
-def get_region_data(map_obj, reg, fill_val=0, b_full_size=False):
+def get_region_data(
+    map_obj: sunpy.map.Map,
+    region: regions.SkyRegion,
+    fill_value: float = 0,
+    b_full_size: bool = False
+) -> np.ndarray:
     """
     Get the map data contained within the provided region.
 
     Parameters
     ----------
-    map_obj : Sunpy map
+    map_obj : sunpy.map.Map
         The map containing the region of interest.
-    reg : PixelRegion
+    region : regions.SkyRegion
         The bounding region.
-    fill_val : float
+    fill_value : float
         The default null value in indices outside the region.
     b_full_size : bool
-        Specifies whether the returned array, reg_data,
+        Specifies whether the returned array, region_data,
         is the same shape as the input array, data.
         The default is False since it is wasteful in memory.
 
     Returns
     -------
-    reg_data : np.ndarray
+    region_data : np.ndarray
         An array containing only the pixel information within
         the provided reg.
     """
 
-    data = map_obj.data
-    reg_mask = (reg.to_pixel(map_obj.wcs)).to_mask()
+    map_data = map_obj.data
+    reg_mask = (region.to_pixel(map_obj.wcs)).to_mask()
     xmin, xmax = reg_mask.bbox.ixmin, reg_mask.bbox.ixmax
     ymin, ymax = reg_mask.bbox.iymin, reg_mask.bbox.iymax
-    reg_data = np.where(reg_mask.data==1, data[ymin:ymax, xmin:xmax], fill_val)
+    region_data = np.where(reg_mask.data==1, map_data[ymin:ymax, xmin:xmax], fill_value)
 
     if b_full_size:
-        a = np.full(shape=data.shape, fill_value=fill_val, dtype=reg_data.dtype)
-        a[ymin:ymax, xmin:xmax] = reg_data
-        reg_data = a
-
-    return reg_data
-
-
-class Lightcurve(typing.NamedTuple):
-    t: list[float]
-    y: list[float]
-    exposure_times: list[u.Quantity]
-
-
-def make_lightcurve_and_download(
-    start_time: str | astropy.time.Time,
-    end_time: str | astropy.time.Time,
-    wavelength: int | u.Quantity,
-    center: tuple[float, float],
-    radius: float
-) -> Lightcurve:
-    """
-    Download proper FITS files given time range and wavelength into directory structure.
-    Then, construct lightcurve for the specified region.
-    Currently, the intensities are **not** normalized in any way;
-    the lightcurve scale is arbitrary.
-    Downloads are retried `file_io.MAX_DOWNLOAD_ATTEMPTS` times.
-
-    Parameters
-    ----------
-    start_time : str | astropy.time.Time
-        The start time of the observation. Formatted as
-        '%Y-%m-%dT%H:%M:%S.%f'.
-    end_time : str | astropy.time.Time
-        The end time of the observation. Formatted as
-        '%Y-%m-%dT%H:%M:%S.%f'.
-    wavelength : int | u.Angstrom
-        The wavelength of interest.
-    center : tuple[float, float]
-        Coordinates for the region center, (x,y), in arcseconds.
-    radius : float
-        The radius of the circular region.
-
-    Returns
-    -------
-    Lightcurve NamedTuple
-        t : list[float]
-            The times for each data point.
-        y : list[float]
-            The lightcurve values at each time.
-        exposure_times : list[u.Quantity]
-            Exposure time of each point.
-    """
-
-    print('Generating light curve data.')
-
-    files = file_io.download_fits_parallel(
-        start_time=astropy.time.Time(start_time),
-        end_time=astropy.time.Time(end_time),
-        wavelengths=[wavelength << u.Angstrom],
-        num_simultaneous_connections=8,
-        num_retries_for_failed=file_io.MAX_DOWNLOAD_ATTEMPTS,
-        print_debug_messages=False,
-    )
-
-    if any(not f.success for f in files):
-        maxx = file_io.MAX_DOWNLOAD_ATTEMPTS
-        raise RuntimeError(
-            f'Failed to download some files after {maxx} tries. Quit.'
+        a = np.full(
+            shape=map_data.shape,
+            fill_value=fill_value,
+            dtype=region_data.dtype
         )
+        a[ymin:ymax, xmin:xmax] = region_data
+        region_data = a
 
-    return make_lightcurve([f.file for f in files], center, radius)
-
-
-def make_lightcurve(
-    files: list[file_io.air.DownloadResult],
-    center: tuple[float, float],
-    radius: float
-) -> Lightcurve:
-    '''
-    Construct lightcurve for the specified region.
-
-    Parameters
-    ----------
-    files : list[str]
-        The FITS files to load into `sunpy.map.Map`s
-    center : tuple[float, float]
-        Coordinates for the region center, (x,y), in arcseconds.
-    radius : float
-        The radius of the circular region.
-
-    Returns
-    -------
-    Lightcurve NamedTuple
-        t : list[float]
-            The times for each data point.
-        y : list[float]
-            The lightcurve values at each time.
-        exposure_times : list[u.Quantity]
-            Exposure time of each point.
-    '''
-    times, intensities = [], []
-    exposure_times = []
-    for f in files:
-        m = sunpy.map.Map(f)
-
-        bl, tr = get_subregion_corners(m, center, radius)
-        subm = m.submap(bottom_left=bl, top_right=tr)
-        reg = CircleSkyRegion(SkyCoord(*center, unit='arcsecond',
-            frame=subm.coordinate_frame), radius*u.arcsecond)
-        reg_data = get_region_data(subm, reg)
-
-        time_str = m.date.value#.split('.')[0] # Remove the milliseconds
-        times.append(convert.str_to_epoch(time_str))
-        intensities.append(np.sum(reg_data))
-        exposure_times.append(m.exposure_time)
-
-    return Lightcurve(t=times, y=intensities, exposure_times=exposure_times)
+    return region_data
 
 
-def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='', **plot_kwargs):
+def plot_lightcurve(
+    lightcurve: Lightcurve,
+    fig: matplotlib.figure.Figure | None= None,
+    ax: matplotlib.axes.Axes | None= None,
+    **plot_kwargs
+) -> tuple[matplotlib.figure.Figure, matplotlib.axes]:
     """
     A general method for plotting lightcurve data.
     If fig and ax are provided, then the lightcurve data
@@ -451,168 +322,264 @@ def plot_lightcurve(lightcurve, fig=None, ax=None, xlabel='', ylabel='', title='
         where times and data are in a format (i.e. list or np.ndarray)
         that is compatible with matplotlib.axes plotting. The elements
         in times should be of type str.
-    fig : matplotlib figure object
+    fig : matplotlib.figure.Figure | None
         If a figure object is provided, the provided lightcurve data
         will be added to the existing fig object.
-    ax : matplotlib axes object
+    ax : matplotlib.axes | None
         If an axes object is provided, the provided lightcurve data
         will be added to the existing ax object.
-    xlabel : str
-        The x-axis label.
-    ylabel : str
-        The y-axis label.
-    title : str
-        The title string.
     **plot_kwargs
         Style parameters of the plotted lightcurve.
 
     Returns
     -------
-    fig : matplotlib figure object
+    fig : matplotlib.figure.Figure
         The created figure object if fig was not provded,
         or the updated figure object if it was provided.
-    ax : matplotlib axes object
+    ax : matplotlib.axes
         The created axes object if ax was not provded,
         or the updated axes object if it was provided.
     """
 
-    defaultKwargs = {
-        'linestyle':'dashed', 'linewidth':0.6, 'marker':'o',
-        'markersize':2, 'color':'black'
+    default_kwargs = {
+        'linestyle': 'dashed',
+        'linewidth': 1,
+        'marker': 'o',
+        'markersize': 2,
+        'color': 'black'
     }
-    plot_kwargs = {**defaultKwargs, **plot_kwargs}
+    plot_kwargs = {**default_kwargs, **plot_kwargs}
 
-    # Convert the time data to datetime objects.
-    converted_datetimes = list(map(convert.epoch_to_datetime, lightcurve[0]))
-    # norm_intensities = lightcurve[1]/np.sum(lightcurve[1]) # TODO: Decide normalization
+    times_converted = [t.datetime for t in lightcurve[0]]
+    lightcurve_converted = (times_converted, lightcurve[1])
 
-    lightcurve_converted = (converted_datetimes, lightcurve[1])
-
-    if fig is None:
-        fig, ax = plt.subplots(figsize=(12,4))
+    if fig is None and ax is None:
+        apply_style('lightcurve.mplstyle')
+        fig, ax = plt.subplots()
 
     _ = ax.plot(*lightcurve_converted, **plot_kwargs)
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
     ax.xaxis.set_minor_locator(mdates.MinuteLocator(interval=1))
-    ax.tick_params(which='major', direction='in')
-    ax.tick_params(which='minor', direction='in')
-    ax.set(xlabel=xlabel, ylabel=ylabel, title=title)
 
-    return fig, ax
+    return (fig or plt.gcf()), ax
 
 
-def process_observation(obs):
+def make_overview_gridspec(
+) -> tuple[matplotlib.figure.Figure, matplotlib.gridspec, matplotlib.gridspec]:
     """
-    This method compiles all functionality into one location to take
-    advantage of all of the custom methods in this package.
+    Prepares the gridspec objects for the plot_overview method.
+    """
 
-    Example of an observation dictionary:
-    obs = {
-        'start_time': '2019-04-03T17:40:00.0', # The observation start time
-        'end_time': '2019-04-03T17:55:00.0',   # The observation end time
-        'map_time': '2019-04-03T18:00:33.0',   # The time used for plotting the maps
-        'wavelengths': [171],                  # The wavelengths to examine
-        'center': (-220, 330),                 # The center of the region of interest (arcseconds)
-        'radius': 50,                          # The radius of the region of interest (arcseconds)
-        'N': 21,                               # The boxcar width
-        'name': 'reg1'                         # The region name to delineate files
-    }
+    fig = plt.figure(figsize=(20, 14))
+    gs = fig.add_gridspec(2, 1, height_ratios=[2, 1])
+    gs_maps = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0], wspace=0.4)
+    gs_lc = gs[1].subgridspec(2, 1, hspace=0)
+
+    return fig, gs_maps, gs_lc
+
+
+def plot_overview(
+    map_obj: sunpy.map.Map,
+    region: regions.SkyRegion,
+    lightcurve: Lightcurve,
+    boxcar_width: int = None,
+    map_kwargs: dict = {},
+    lc_kwargs: dict = {},
+) -> tuple[matplotlib.figure.Figure, matplotlib.gridspec, matplotlib.gridspec]:
+    """
+    Make an overview plot of the specified plot, region, and lightcurve.
+    # TODO: Giving the map, region, and lightcurve parameters is kinda silly...
+    # TODO: Also maybe add other kwargs options for the averaged and detrended plots?
+    # TODO: Add the same datetime formatter used in the summary plots?
 
     Parameters
     ----------
-    obs : dict
-        A dictionary containing all of the observation information.
-    
+    map_obj : sunpy.map.Map
+        The map to plotted.
+    region : regions.SkyRegion
+        The region of interest.
+    lightcurve : Lightcurve
+        The lightcurve corresponding to the region.
+    boxcar_width : int
+        The width over which the lightcurve will be averaged.
+        If no width is provided, no averaging is performed.
+    map_kwargs : dict
+        Style parameters for the maps.
+    lc_kwargs : dict
+        Style parameters for the lightcurve.
+
     Returns
     -------
-    dicts : list of dicts
-        Each dict in the list contains processed data for each
-        wavelength examined in the observation.
-        ex: {'obs_map': obs_map, 'obs_submap': obs_submap, 'lightcurve': lightcurve, 'fig': fig}
+    fig : matplotlib.figure.Figure
+        The figure containing the maps and plots.
+    gs_maps: matplotlib.gridspec
+        The gridspec object containing the map axes.
+    gs_lc: matplotlib.gridspec
+        The gridspec object containing the lightcurve axes.
     """
 
-    start_date = obs['start_time'].split('T')[0].replace('-', '')
-    lightcurves_dir = file_io.LIGHTCURVES_DIR_FORMAT.format(date=start_date)
-    images_dir = file_io.IMAGES_DIR_FORMAT.format(date=start_date)
-    print(f'Generating plots for {obs["start_time"].replace("T", " ")} through {obs["end_time"].replace("T", " ")}')
-    
-    startt = obs['start_time'].replace('-','').replace(':','')
-    endt = obs['end_time'].replace('-','').replace(':','')
-    dicts = []
+    wavelength = map_obj._meta["wavelnth"]
+    map_time = map_obj.date.strftime("%Y-%m-%d %H:%M:%S")
 
-    for wavelength in obs['wavelengths']:
-        
-        print('Processing data for wavelength ' + str(wavelength))
+    fig, gs_maps, gs_lc = make_overview_gridspec()
+    fig.suptitle(f'AIA {wavelength} {map_time}', fontsize=20)
 
-        # Adjust the value of the boxcar width to accommodate the available data points.
-        r = file_io.Fido.search(a.Time(obs['start_time'], obs['end_time']),
-            a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), a.Sample(12 * u.second))
-        obs['N'] = utils.adjust_n(len(r[0]), obs['N'])
+    apply_style('map.mplstyle')
+    map_ax = fig.add_subplot(gs_maps[0,0], projection=map_obj)
+    plot_map(map_obj, fig, map_ax, **map_kwargs)
+    add_region(map_obj, map_ax, region)
+    map_ax.set_title('Full disk')
 
-        fig = plt.figure(figsize=(10, 7))
-        gs = fig.add_gridspec(2, 1, height_ratios=[2, 1])
-        gs_maps = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0], wspace=0.3)
-        gs_lc = gs[1].subgridspec(2, 1, hspace=0)
+    submap_ = make_submap(map_obj, region)
+    submap_ax = fig.add_subplot(gs_maps[0,1], projection=submap_)
+    plot_map(submap_, fig, submap_ax, **map_kwargs)
+    add_region(submap_, submap_ax, region)
+    submap_ax.set_title('Selected Region')
 
-        # Make the full map.
-        obs_map = get_map(wavelength, obs['map_time'])
-        map_ax = fig.add_subplot(gs_maps[0,0], projection=obs_map)
-        fig, map_ax = plot_map(obs_map, fig, map_ax, title='Full disk')
-        _ = add_region(obs_map, map_ax, obs['center'], obs['radius'],
-            label='Region', color=COLORMAP[wavelength])
+    apply_style('lightcurve.mplstyle')
+    lightcurve_ax = fig.add_subplot(gs_lc[0,:])
 
-        # Make the submap around the region of interest.
-        obs_submap = make_submap(obs_map, obs['center'], obs['radius'])
-        submap_ax = fig.add_subplot(gs_maps[0,1], projection=obs_submap)
-        fig, submap_ax = plot_map(obs_submap, fig, submap_ax,
-            title=f'Selected region: {obs["center"]}, r={obs["radius"]}')
-        _ = add_region(obs_submap, submap_ax, obs['center'], obs['radius'],
-            alpha=1, label='Region', color=COLORMAP[wavelength])
+    plot_lightcurve(
+        lightcurve,
+        fig,
+        lightcurve_ax,
+        label='Lightcurve',
+        **lc_kwargs
+    )
+    lightcurve_ax.set(
+        xlabel='Time',
+        ylabel='Intensity',
+        title='Region lightcurve'
+    )
 
-        csv_file = f'{lightcurves_dir}lc_{startt}-{endt}_{wavelength}_N{obs["N"]}_{obs["name"]}.csv'
-        if file_io.os.path.exists(csv_file):
-            lightcurve = file_io.read_lightcurves(csv_file)
-        else:
-            # Then make the lightcurve.
-            lightcurve = make_lightcurve(obs['start_time'], obs['end_time'], wavelength, obs['center'], obs['radius'])
+    if boxcar_width is not None:
 
-        bc, N = utils.boxcar_average(lightcurve[1], obs['N'])
-        lightcurve_bc = (lightcurve[0], bc)
-        lightcurve_detrended = (lightcurve[0], lightcurve[1] - lightcurve_bc[1])
-
-        # Plot lightcurve with boxcar average.
-        lightcurve_ax = fig.add_subplot(gs_lc[0,:])
-        fig, lightcurve_ax = plot_lightcurve(lightcurve, fig, lightcurve_ax,
-            xlabel='', ylabel='Intensity', title='Region lightcurve',
-            markersize=1, linestyle='solid', label='Lightcurve')
-        plot_lightcurve(lightcurve_bc, fig, lightcurve_ax,
-            xlabel='', ylabel='Intensity', title='Region lightcurve',
-            markersize=1, color='steelblue', alpha=0.5, linestyle='dotted', label=f'Boxcar, $N=${obs["N"]}')
+        averaged = lc.make_averaged_lightcurve(lightcurve, boxcar_width)
+        plot_lightcurve(
+            averaged, fig, lightcurve_ax,
+            color='steelblue', alpha=0.75, linestyle='dotted',
+            label=f'Boxcar, $N=${boxcar_width}'
+        )
         plt.setp(lightcurve_ax.get_xticklabels(), visible=False)
-        lightcurve_ax.legend(prop={'size': 6})
+        lightcurve_ax.legend()
 
-        # Plot detrended curve.
         detrended_ax = fig.add_subplot(gs_lc[1,:])
-        fig, detrended_ax = plot_lightcurve(lightcurve_detrended, fig, detrended_ax,
-            xlabel='Time', ylabel='Residual', title='',
-            markersize=1, color='purple', label='Detrended')
-        detrended_ax.axhline(y=0, color='gray', linestyle='dotted', linewidth=0.6, label='Zero')
-        detrended_ax.tick_params(which='major', bottom=True, top=True)
-        detrended_ax.tick_params(which='minor', bottom=True, top=True)
+        detrended = lc.make_detrended_lightcurve(lightcurve, averaged)
+        plot_lightcurve(detrended, fig, detrended_ax, color='purple', label='Detrended')
+        
+        detrended_ax.set(ylabel='Residual')
+        detrended_ax.axhline(y=0, color='gray', linestyle='dotted', linewidth=0.6)
         [xmin, xmax, ymin, ymax] = lightcurve_ax.axis()
-        detrended_ax.set_xlim(left=xmin, right=xmax)
+        detrended_ax.set_xlim(left=xmin, right=xmax)        
 
-        file_io.save_lightcurves((lightcurve[0], lightcurve[1]), csv_file)
+    return fig, gs_maps, gs_lc
 
-        title = 'AIA ' + str(int(obs_map.wavelength.value)) + f' {obs_map.date}'.replace('T', ' ')
-        fig.suptitle(title)
 
-        fig_file = f'{images_dir}plots_{startt}-{endt}_{wavelength}_N{obs["N"]}_{obs["name"]}.png'
-        plt.savefig(fig_file, bbox_inches='tight', dpi=300)
-        print(f'Saved plots to \'{fig_file}\'')
+def summary_lightcurves(dat: Lightcurve) -> dict[str, object]:
+    
+    apply_style('summary.mplstyle')
 
-        # Package the generated products into a dictionary.
-        d = {'obs_map': obs_map, 'obs_submap': obs_submap, 'lightcurve': lightcurve, 'fig': fig}
-        dicts.append(d)
+    sorted_dat = lc.sort_by_time(dat)
+    dtimes = (sorted_dat.t).datetime
 
-    return dicts
+    conv = mdates.ConciseDateConverter()
+    orig = munits.registry[datetime]
+    munits.registry[datetime] = conv
+
+    fig, (raw_ax, norm_ax, exp_ax) = plt.subplots(
+        ncols=1, nrows=3,
+        layout='constrained',
+        figsize=(18, 10),
+        sharex=True
+    )
+
+    shared_kw = dict(markersize=8, marker='.', lw=1)
+    raw_ax.plot(dtimes, sorted_dat.y, color='red', **shared_kw)
+    raw_ax.set(ylabel='Unnormalized light curve [arb]')
+
+    ets = np.array([et.value for et in sorted_dat.exposure_times])
+    exp_ax.scatter(dtimes, ets, color='blue', s=2)
+    exp_ax.set(ylabel='Exposure time per frame [s]')
+
+    norm_ax.plot(dtimes, np.array(sorted_dat.y) / np.array(ets), color='blue', **shared_kw)
+    norm_ax.set(ylabel='Normalized light curve [arb / sec]')
+
+    munits.registry[datetime] = orig
+    return {
+        'fig': fig,
+        'raw_ax': raw_ax,
+        'norm_ax': norm_ax,
+        'exp_ax': exp_ax
+    }
+
+
+InsetRet = dict[str, matplotlib.figure.Figure | matplotlib.axes.Axes]
+def plot_inset_region(
+     fits_path: str | pathlib.Path,
+     region_can: RegionCanister,
+     fig: matplotlib.figure.Figure | None=None,
+     ax: matplotlib.axes.Axes | None=None,
+     reg_kw: dict[str, object] | None=None,
+     inset_position: numpy.typing.ArrayLike | None=None
+) -> InsetRet:
+
+     m = sunpy.map.Map(fits_path)
+
+     pad_mult = 1.5
+     hw = region_can.half_width()
+     bottom_left = SkyCoord(
+          *(region_can.center - hw*pad_mult),
+          frame=m.coordinate_frame
+     )
+     top_right = SkyCoord(
+          *(region_can.center + hw*pad_mult) << u.arcsec,
+          frame=m.coordinate_frame
+     )
+
+     subm = m.submap(bottom_left=bottom_left, top_right=top_right)
+
+     fig = fig or plt.gcf()
+     if ax is None:
+        ax = fig.add_subplot(projection=m)
+        m.plot(axes=ax)
+
+     main_tick_col = 'gray'
+     ax.coords.frame.set_color(main_tick_col)
+     for crd in ax.coords:
+          crd.tick_params(color=main_tick_col)
+
+     pos = inset_position or [0.35, 0.35, 0.3, 0.3]
+     axins = ax.inset_axes(pos, projection=subm)
+     subm.plot(annotate=False, axes=axins, title=False)
+
+     skc = SkyCoord(*region_can.center, frame=m.coordinate_frame)
+     reg = region_can.kind(
+          skc,
+          **region_can.constructor_kwargs
+     )
+     default = dict(lw=2, color='lightblue', ls='dashed')
+     reg_kw = default | (reg_kw or dict())
+     add_region(map_obj=m, ax=ax, region=reg, **reg_kw)
+     add_region(map_obj=subm, ax=axins, region=reg, **reg_kw)
+
+     indic_col = (1, 1, 1, 0.8)
+     x0, y0 = bottom_left.to_pixel(m.wcs)
+     x1, y1 = top_right.to_pixel(m.wcs)
+     ax.indicate_inset(
+          bounds=(x0, y0, x1 - x0, y1 - y0),
+          inset_ax=axins,
+          edgecolor=indic_col,
+          linewidth=2,
+          alpha=indic_col[-1]
+     )
+
+     for crd in axins.coords:
+          crd.set_ticks_visible(False)
+          crd.set_ticklabel_visible(False)
+     axins.set(
+          title=' ', xlabel=' ', ylabel=' ',
+     )
+     axins.coords.frame.set_color(indic_col)
+     axins.grid(False)
+
+     return dict(fig=fig, ax=ax, axins=axins)
