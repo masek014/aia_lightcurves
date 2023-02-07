@@ -19,7 +19,7 @@ xtick.major.pad     : 10
 xtick.minor.pad     : 10
 xtick.direction     : in
 xtick.color         : gray
-xtick.labelcolor    : black
+xtick.labelcolor    : gray
 
 ytick.minor.visible : True
 ytick.major.size    : 10
@@ -30,4 +30,4 @@ ytick.major.pad     : 10
 ytick.minor.pad     : 10
 ytick.direction     : in
 ytick.color         : gray
-ytick.labelcolor    : black
+ytick.labelcolor    : gray

@@ -113,6 +113,12 @@ def get_map(
     return aia_map
 
 
+def make_map(data_file: str) -> sunpy.map.Map:
+
+    m = sunpy.map.Map(data_file)
+    return m
+
+
 def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
     """
     Plot the provided sunpy.map.Map.
@@ -521,64 +527,90 @@ def plot_inset_region(
      reg_kw: dict[str, object] | None=None,
      inset_position: numpy.typing.ArrayLike | None=None
 ) -> InsetRet:
+    """
+    inset_position can be specified by either fractions of the plotting
+    area (default) or by positions using astropy quantites (e.g. arcsec).
+    If the position is specified, it must be within the map coordinate frame.
+    It is ordered as follows: (bottom left x, bottom left y, width, height).
+    """
 
-     m = sunpy.map.Map(fits_path)
+    m = sunpy.map.Map(fits_path)
+    pad_mult = 1.25
+    hw = region_can.half_width()
 
-     pad_mult = 1.25
-     hw = region_can.half_width()
-     bottom_left = SkyCoord(
-          *(region_can.center - hw*pad_mult),
-          frame=m.coordinate_frame
-     )
-     top_right = SkyCoord(
-          *(region_can.center + hw*pad_mult) << u.arcsec,
-          frame=m.coordinate_frame
-     )
+    # TODO: Should we compute bottom_left and top_right using the
+    # inset position rather than the region size?
+    # The submap overrides whatever the user specifies with
+    # inset_position, so it may be confusing.
+    bottom_left = SkyCoord(
+         *(region_can.center - hw*pad_mult),
+         frame=m.coordinate_frame
+    )
+    top_right = SkyCoord(
+         *(region_can.center + hw*pad_mult) << u.arcsec,
+         frame=m.coordinate_frame
+    )
 
-     subm = m.submap(bottom_left=bottom_left, top_right=top_right)
+    subm = m.submap(bottom_left=bottom_left, top_right=top_right)
 
-     fig = fig or plt.gcf()
-     if ax is None:
+    fig = fig or plt.gcf()
+    if ax is None:
         ax = fig.add_subplot(projection=m)
         m.plot(axes=ax)
 
-     main_tick_col = 'gray'
-     ax.coords.frame.set_color(main_tick_col)
-     for crd in ax.coords:
-          crd.tick_params(color=main_tick_col)
+    main_tick_col = 'gray'
+    ax.coords.frame.set_color(main_tick_col)
+    for crd in ax.coords:
+         crd.tick_params(color=main_tick_col)
 
-     pos = inset_position or [0.35, 0.35, 0.3, 0.3]
-     axins = ax.inset_axes(pos, projection=subm)
-     subm.plot(annotate=False, axes=axins, title=False)
+    pos = inset_position or [0.35, 0.35, 0.3, 0.3]
+    if isinstance(pos[0], u.Quantity):
+        bl = SkyCoord(
+            *(pos[0], pos[1]),
+            frame=subm.coordinate_frame
+        )
+        tr = SkyCoord(
+            *(pos[0] + pos[2], pos[1] + pos[3]),
+            frame=subm.coordinate_frame
+        )
+        bl = subm.wcs.world_to_pixel(bl)
+        tr = subm.wcs.world_to_pixel(tr)
+        pos = (bl[0], bl[1], tr[0] - bl[0], tr[1] - bl[1])
+        transform = ax.get_transform(subm.wcs)
+    else:
+        transform = None
 
-     skc = SkyCoord(*region_can.center, frame=m.coordinate_frame)
-     reg = region_can.kind(
-          skc,
-          **region_can.constructor_kwargs
-     )
-     default = dict(lw=2, color='lightblue', ls='dashed')
-     reg_kw = default | (reg_kw or dict())
-     add_region(map_obj=m, ax=ax, region=reg, **reg_kw)
-     add_region(map_obj=subm, ax=axins, region=reg, **reg_kw)
+    axins = ax.inset_axes(pos, projection=subm, transform=transform)
+    subm.plot(annotate=False, axes=axins, title=False)
+    
+    skc = SkyCoord(*region_can.center, frame=m.coordinate_frame)
+    reg = region_can.kind(
+         skc,
+         **region_can.constructor_kwargs
+    )
+    default = dict(lw=2, color='lightblue', ls='dashed')
+    reg_kw = default | (reg_kw or dict())
+    add_region(map_obj=m, ax=ax, region=reg, **reg_kw)
+    add_region(map_obj=subm, ax=axins, region=reg, **reg_kw)
 
-     indic_col = (1, 1, 1, 0.8)
-     x0, y0 = bottom_left.to_pixel(m.wcs)
-     x1, y1 = top_right.to_pixel(m.wcs)
-     ax.indicate_inset(
-          bounds=(x0, y0, x1 - x0, y1 - y0),
-          inset_ax=axins,
-          edgecolor=indic_col,
-          linewidth=2,
-          alpha=indic_col[-1]
-     )
+    indic_col = (1, 1, 1, 0.8)
+    x0, y0 = bottom_left.to_pixel(m.wcs)
+    x1, y1 = top_right.to_pixel(m.wcs)
+    ax.indicate_inset(
+         bounds=(x0, y0, x1 - x0, y1 - y0),
+         inset_ax=axins,
+         edgecolor=indic_col,
+         linewidth=1,
+         alpha=indic_col[-1]
+    )
 
-     for crd in axins.coords:
-          crd.set_ticks_visible(False)
-          crd.set_ticklabel_visible(False)
-     axins.set(
-          title=' ', xlabel=' ', ylabel=' ',
-     )
-     axins.coords.frame.set_color(indic_col)
-     axins.grid(False)
+    for crd in axins.coords:
+         crd.set_ticks_visible(False)
+         crd.set_ticklabel_visible(False)
+    axins.set(
+         title=' ', xlabel=' ', ylabel=' ',
+    )
+    axins.coords.frame.set_color(indic_col)
+    axins.grid(False)
 
-     return dict(fig=fig, ax=ax, axins=axins)
+    return dict(fig=fig, ax=ax, axins=axins)
