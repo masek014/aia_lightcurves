@@ -371,7 +371,7 @@ def make_overview_gridspec(
     """
 
     fig = plt.figure(figsize=(20, 14))
-    gs = fig.add_gridspec(2, 1, height_ratios=[2, 1])
+    gs = fig.add_gridspec(2, 1, height_ratios=[2, 1], hspace=0.3)
     gs_maps = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0], wspace=0.4)
     gs_lc = gs[1].subgridspec(2, 1, hspace=0)
 
@@ -422,7 +422,7 @@ def plot_overview(
     map_time = map_obj.date.strftime("%Y-%m-%d %H:%M:%S")
 
     fig, gs_maps, gs_lc = make_overview_gridspec()
-    fig.suptitle(f'AIA {wavelength} {map_time}', fontsize=20)
+    fig.suptitle(f'AIA {wavelength} {map_time}', fontsize=24)
 
     apply_style('map.mplstyle')
     map_ax = fig.add_subplot(gs_maps[0,0], projection=map_obj)
@@ -434,7 +434,7 @@ def plot_overview(
     submap_ax = fig.add_subplot(gs_maps[0,1], projection=submap_)
     plot_map(submap_, fig, submap_ax, **map_kwargs)
     add_region(submap_, submap_ax, region)
-    submap_ax.set_title('Selected Region')
+    submap_ax.set_title('Selected region')
 
     apply_style('lightcurve.mplstyle')
     lightcurve_ax = fig.add_subplot(gs_lc[0,:])
@@ -447,7 +447,6 @@ def plot_overview(
         **lc_kwargs
     )
     lightcurve_ax.set(
-        xlabel='Time',
         ylabel='Intensity',
         title='Region lightcurve'
     )
@@ -525,7 +524,7 @@ def plot_inset_region(
 
      m = sunpy.map.Map(fits_path)
 
-     pad_mult = 1.5
+     pad_mult = 1.25
      hw = region_can.half_width()
      bottom_left = SkyCoord(
           *(region_can.center - hw*pad_mult),

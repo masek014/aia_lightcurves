@@ -1,9 +1,12 @@
 import os
 import sys
+import warnings
 
 import numpy as np
 import astropy.time
 import astropy.units as u
+from astropy.io import fits
+from astropy.utils.exceptions import AstropyUserWarning
 from sunpy.net import Fido, attrs as a
 
 from .net import aia_requests as air
@@ -35,6 +38,81 @@ def make_directories(date):
     for d in dirs:
         if not os.path.isdir(d):
             os.mkdir(d)
+
+
+def gather_local_files(
+    fits_dir: str,
+    time_range: tuple[astropy.time.Time],
+    wavelength: u.Quantity,
+) -> list[str]:
+    """
+    Checks in_dir for AIA fits files that fall within the specified time_range.
+    Returns a list of file paths sorted by time.
+    """
+
+    # Catch the astropy fits warnings so we know which
+    # file caused it since astropy doesn't tell us...
+    warnings.filterwarnings('error')
+
+    times = [] # Used for sorting the file names
+    paths = []
+    dir_files = [f for f in os.listdir(fits_dir) if os.path.isfile(os.path.join(fits_dir, f))]
+    for f in dir_files:
+        try:
+            path = os.path.join(fits_dir, f)
+            with fits.open(path, output_verify='warn') as hdu:
+                hdr = hdu[1].header
+                obs_time = astropy.time.Time(hdr['date-obs'], scale='utc', format='isot')
+                same_time = (obs_time >= time_range[0]) and (obs_time <= time_range[1])
+                same_wavelength = (wavelength == hdr['wavelnth'] * u.Unit(hdr['waveunit']))
+                if same_time and same_wavelength:
+                    times.append(obs_time)
+                    paths.append(path)
+        except OSError as e: # Catch empty or corrupted fits files and non-fits files
+            print(f'OSError with file {f}: {e}')
+        except AstropyUserWarning as e:
+            print(f'AstropyUserWarning with file {f}: {e}')
+
+    paths = [f for _, f in sorted(zip(times, paths))]
+
+    warnings.resetwarnings()
+    
+    return paths
+
+
+def check_local_files(
+    fits_dir: str,
+    time_range: tuple[astropy.time.Time],
+    wavelengths: list[u.angstrom]
+) -> tuple[list[str], bool]:
+    """
+    Check if all files within the specified wavelengths are available locally at fits_dir.
+    This method avoids connecting to the SDO servers since they're unreliable,
+    and we don't want to prevent the use of local files based on whether a
+    remote server is offline.
+    """
+
+    local_files = []
+    for w in wavelengths:
+        local_files += gather_local_files(fits_dir, time_range, w)
+    
+    if not local_files:
+        return local_files, False
+
+    with fits.open(local_files[0]) as hdu:
+        f_start = astropy.time.Time(hdu[1].header['date-obs'], scale='utc', format='isot')
+
+    front_diff = (f_start - time_range[0]).to(u.second)
+    range_seconds = (time_range[1] - time_range[0]).to(u.second)
+    expected_num = range_seconds.value / 12
+
+    if front_diff < (expected_num % 1) * 12 * u.second:
+        expected_num += 1
+    expected_num = int(expected_num)
+
+    b_satisfied = expected_num == len(local_files)
+
+    return local_files, b_satisfied
 
 
 @u.quantity_input

@@ -211,7 +211,7 @@ class Observation():
         m = self.data[wavelength]['map']
         
         # TODO: Make the map_kwargs and lc_kwargs parameters.
-        plotting.plot_overview(
+        fig, gs_maps, gs_lc = plotting.plot_overview(
             m,
             self.region_can.construct_given_map(map_=m),
             self.data[wavelength]['lightcurve'],
@@ -220,7 +220,7 @@ class Observation():
         )
 
         fig_path = self._build_figure_path(wavelength, 'overview')
-        plotting.plt.savefig(fig_path, dpi=300, bbox_inches='tight')
+        fig.savefig(fig_path, dpi=300, bbox_inches='tight')
 
 
     def _plot_summary(self, wavelength):
@@ -228,5 +228,5 @@ class Observation():
         lightcurve = self.data[wavelength]['lightcurve']
         d = plotting.summary_lightcurves(lightcurve)
         fig_path = self._build_figure_path(wavelength, 'summary')
-        d['fig'].set_constrained_layout(True)
+        d['fig'].set_layout_engine('constrained')
         d['fig'].savefig(fig_path, dpi=300)

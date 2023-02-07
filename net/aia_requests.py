@@ -4,8 +4,8 @@ except ImportError:
     import aia_fmt_xml as afx
 from dataclasses import dataclass
 
-import astropy.units as u
 import astropy.time
+import astropy.units as u
 import copy
 import functools
 import logging
@@ -13,15 +13,21 @@ import math
 import multiprocessing as mp
 import multiprocessing.dummy as mpdummy
 import os
+import parse
 import requests
 import requests.exceptions as rex
 import sys
 import typing
 import xmltodict
 
+from .. import file_io
+
 DATE_FMT = '%Y%m%d'
 TIME_FMT = '%H%M%S'
 DATETIME_FMT = f'{DATE_FMT}{TIME_FMT}'
+
+URL_REF = astropy.time.Time('1977-01-01T00:00:00', scale='tai', format='isot')
+URL_FMT = 'https://sdo7.nascom.nasa.gov/cgi-bin/drms_export.cgi?series=aia__lev1;compress=rice;record={wavelength}_{time}-{time}'
 
 @dataclass
 class Config:
@@ -31,6 +37,7 @@ class Config:
 cfg = Config(10 << u.s)
 def debug_print(*args, **kwargs):
     logging.info(kwargs.get('sep', ' ').join(str(s) for s in args), **kwargs)
+
 
 class DownloadResult(typing.NamedTuple):
     url: str
@@ -52,29 +59,44 @@ def download_aia_between(
 ) -> list[DownloadResult]:
     '''
     download AIA fits files given the input args.
+    only downloads the fits files not available locally in fits_out_dir.
     returns: the list of filenames that were downloaded as DownloadResults
     '''
+
+    local_files, b_satisfied = file_io.check_local_files(fits_out_dir, (start, end), wavelengths)
+
+    if b_satisfied:
+        debug_print('all files locally available')
+        return [DownloadResult(None, f) for f in local_files]
+
     all_urls = []
     successful = []
     failed = []
     # do this sequentially because it's fast
     debug_print('start find aia urls')
     for w in wavelengths:
-        all_urls += build_aia_urls(start, end, w)
+        w_urls = build_aia_urls(start, end, w)
+        w_urls.sort()
+        all_urls += w_urls
     debug_print(f'done find aia urls')
+
+    if local_files:
+        missing_urls = get_missing_urls(all_urls, local_files)
+    else:
+        missing_urls = all_urls
 
     download_wrapper = functools.partial(actual_download_files, fits_out_dir)
 
     # do this in parallel because it's slow
     tries = 0
-    initial_num = len(all_urls)
+    initial_num = len(missing_urls)
     while tries < attempts:
         debug_print('start try downloads')
         with mpdummy.Pool(processes=num_jobs) as p:
             cur_downloaded = p.map(
                 download_wrapper,
-                all_urls,
-                chunksize=math.ceil(len(all_urls) / num_jobs)
+                missing_urls,
+                chunksize=math.ceil(len(missing_urls) / num_jobs)
             )
         debug_print('done try downloads')
 
@@ -92,7 +114,7 @@ def download_aia_between(
         errored_to_print = '\n\t' + '\n\t'.join(retry)
         print(f'{failed} / {initial_num} downloads failed.')
         print(f'retrying the following (attempt {1 + tries} / {attempts}): {errored_to_print}')
-        all_urls = copy.deepcopy(retry)
+        missing_urls = copy.deepcopy(retry)
         tries += 1
 
     return successful + failed
@@ -227,6 +249,38 @@ def actual_download_files(output_directory: str, url: str) -> DownloadResult:
         return DownloadResult(url, full_fn, e)
 
     return DownloadResult(url, full_fn)
+
+
+def get_missing_urls(
+    urls: list[str],
+    files: list[str]
+) -> list[str]:
+    """
+    Determines which urls correspond to files missing locally so
+    they can be downloaded. The TAI timestamps are read from the
+    provided urls and files, and all urls missing a partner file
+    are returned.
+    """
+
+    file_tais = []
+    for f in files:
+        with file_io.fits.open(f) as hdu:
+            t = hdu[1].header['T_REC']
+            file_tais.append(astropy.time.Time(t, scale='utc', format='isot'))
+    
+    missing_urls = []
+    for url in urls:
+        t = parse.parse(URL_FMT, url)['time']
+        t = URL_REF + astropy.time.TimeDelta(t, format='sec')
+        tai = astropy.time.Time(t, scale='utc', format='isot')
+        if tai not in file_tais:
+            missing_urls.append(url)
+
+    debug_print('urls of missing files:')
+    for m in missing_urls:
+        debug_print(m)
+
+    return missing_urls
 
 
 def test():
