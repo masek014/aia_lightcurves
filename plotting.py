@@ -564,6 +564,8 @@ def plot_inset_region(
          crd.tick_params(color=main_tick_col)
 
     pos = inset_position or [0.35, 0.35, 0.3, 0.3]
+
+    # TODO: Make a separate method?
     if isinstance(pos[0], u.Quantity):
         bl = SkyCoord(
             *(pos[0], pos[1]),

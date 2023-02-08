@@ -20,6 +20,20 @@ IMAGES_DIR_FORMAT = DATA_DIR + '{date}/images/'
 sys.path.append(os.getcwd())
 
 
+FILTER_CADENCES = {
+      94 * u.Angstrom : 12 * u.second,
+     131 * u.Angstrom : 12 * u.second,
+     171 * u.Angstrom : 12 * u.second,
+     193 * u.Angstrom : 12 * u.second,
+     211 * u.Angstrom : 12 * u.second,
+     304 * u.Angstrom : 12 * u.second,
+     335 * u.Angstrom : 12 * u.second,
+    1600 * u.Angstrom : 24 * u.second,
+    1700 * u.Angstrom : 24 * u.second,
+    4500 * u.Angstrom : 3600 * u.second,
+}
+
+
 def make_directories(date):
     """
     Create the necessary directories for storing the FITS files,
@@ -80,37 +94,42 @@ def gather_local_files(
     return paths
 
 
-def check_local_files(
+def validate_local_files(
     fits_dir: str,
     time_range: tuple[astropy.time.Time],
-    wavelengths: list[u.angstrom]
+    wavelength: u.angstrom
 ) -> tuple[list[str], bool]:
     """
-    Check if all files within the specified wavelengths are available locally at fits_dir.
-    This method avoids connecting to the SDO servers since they're unreliable,
-    and we don't want to prevent the use of local files based on whether a
-    remote server is offline.
+    Returns a list of all available local files and a boolean specifying
+    whether all files are available (True) or if some are missing (False).
+
+    Check if all files within the specified wavelengths are available locally
+    at fits_dir. This method avoids connecting to the SDO servers since
+    they're unreliable, and we don't want to prevent the use of local files
+    based on whether a remote server is offline.
+
+    The found number of files is compared against minimum_expected.
+    It's a minimum since we cannot determine if we require a +1
+    if there are no local files for a given wavelength.
     """
 
-    local_files = []
-    for w in wavelengths:
-        local_files += gather_local_files(fits_dir, time_range, w)
+    duration = (time_range[1] - time_range[0]).to(u.second)
+    cadence = FILTER_CADENCES[wavelength]
+    image_units = duration.value / cadence.value
+    minimum_expected = int(image_units)
+    local_files = gather_local_files(fits_dir, time_range, wavelength)
     
-    if not local_files:
-        return local_files, False
-
-    with fits.open(local_files[0]) as hdu:
-        f_start = astropy.time.Time(hdu[1].header['date-obs'], scale='utc', format='isot')
-
-    front_diff = (f_start - time_range[0]).to(u.second)
-    range_seconds = (time_range[1] - time_range[0]).to(u.second)
-    expected_num = range_seconds.value / 12
-
-    if front_diff < (expected_num % 1) * 12 * u.second:
-        expected_num += 1
-    expected_num = int(expected_num)
-
-    b_satisfied = expected_num == len(local_files)
+    # Correct for possible +1 file depending on
+    # alignment of time_range with the image cadence.
+    if local_files:
+        with fits.open(local_files[0]) as hdu:
+            f_start = astropy.time.Time(hdu[1].header['date-obs'], scale='utc', format='isot')
+        front_diff = (f_start - time_range[0]).to(u.second)
+        front_diff = (front_diff.value % cadence.value) * u.second
+        if front_diff < (image_units % 1) * cadence:
+            minimum_expected += 1
+    
+    b_satisfied = minimum_expected==len(local_files)
 
     return local_files, b_satisfied
 

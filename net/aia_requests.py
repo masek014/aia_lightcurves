@@ -26,7 +26,7 @@ DATE_FMT = '%Y%m%d'
 TIME_FMT = '%H%M%S'
 DATETIME_FMT = f'{DATE_FMT}{TIME_FMT}'
 
-URL_REF = astropy.time.Time('1977-01-01T00:00:00', scale='tai', format='isot')
+URL_REF = astropy.time.Time('1977-01-01T00:00:00.000', scale='tai', format='isot')
 URL_FMT = 'https://sdo7.nascom.nasa.gov/cgi-bin/drms_export.cgi?series=aia__lev1;compress=rice;record={wavelength}_{time}-{time}'
 
 @dataclass
@@ -62,28 +62,26 @@ def download_aia_between(
     only downloads the fits files not available locally in fits_out_dir.
     returns: the list of filenames that were downloaded as DownloadResults
     '''
-
-    local_files, b_satisfied = file_io.check_local_files(fits_out_dir, (start, end), wavelengths)
-
-    if b_satisfied:
-        debug_print('all files locally available')
-        return [DownloadResult(None, f) for f in local_files]
-
-    all_urls = []
+    
+    num_satisfied = 0
     successful = []
     failed = []
+    missing_urls = []
+    
     # do this sequentially because it's fast
-    debug_print('start find aia urls')
     for w in wavelengths:
-        w_urls = build_aia_urls(start, end, w)
-        w_urls.sort()
-        all_urls += w_urls
-    debug_print(f'done find aia urls')
-
-    if local_files:
-        missing_urls = get_missing_urls(all_urls, local_files)
-    else:
-        missing_urls = all_urls
+        w_files, w_satisfied = file_io.validate_local_files(fits_out_dir, (start, end), w)
+        num_satisfied += w_satisfied
+        successful += [DownloadResult(None, f) for f in w_files]
+        if not w_satisfied:
+            debug_print(f'start find {w} urls')
+            w_urls = build_aia_urls(start, end, w)
+            missing_urls += get_missing_urls(w_urls, w_files, w)
+            debug_print(f'done find {w} urls')
+    
+    if num_satisfied == len(wavelengths):
+        debug_print('all files locally available')
+        return successful
 
     download_wrapper = functools.partial(actual_download_files, fits_out_dir)
 
@@ -253,7 +251,8 @@ def actual_download_files(output_directory: str, url: str) -> DownloadResult:
 
 def get_missing_urls(
     urls: list[str],
-    files: list[str]
+    files: list[str],
+    wavelength: u.Quantity
 ) -> list[str]:
     """
     Determines which urls correspond to files missing locally so
@@ -265,20 +264,19 @@ def get_missing_urls(
     file_tais = []
     for f in files:
         with file_io.fits.open(f) as hdu:
-            t = hdu[1].header['T_REC']
-            file_tais.append(astropy.time.Time(t, scale='utc', format='isot'))
+            hdr = hdu[1].header
+            if wavelength == hdr['wavelnth'] * u.Unit(hdr['waveunit']):
+                t = hdu[1].header['T_REC']
+                t = astropy.time.Time(t, scale='utc', format='isot')
+                file_tais.append(str(t))
     
     missing_urls = []
     for url in urls:
         t = parse.parse(URL_FMT, url)['time']
         t = URL_REF + astropy.time.TimeDelta(t, format='sec')
-        tai = astropy.time.Time(t, scale='utc', format='isot')
-        if tai not in file_tais:
+        t = astropy.time.Time(t, scale='utc', format='isot')
+        if str(t) not in file_tais:
             missing_urls.append(url)
-
-    debug_print('urls of missing files:')
-    for m in missing_urls:
-        debug_print(m)
 
     return missing_urls
 
