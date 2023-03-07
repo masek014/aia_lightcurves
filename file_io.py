@@ -1,5 +1,4 @@
 import os
-import sys
 import warnings
 
 import numpy as np
@@ -13,11 +12,10 @@ from .net import aia_requests as air
 
 
 MAX_DOWNLOAD_ATTEMPTS = 3
-DATA_DIR = os.getcwd() + '/data/'
-FITS_DIR_FORMAT = DATA_DIR + '{date}/fits/'
-LIGHTCURVES_DIR_FORMAT = DATA_DIR + '{date}/lightcurves/'
-IMAGES_DIR_FORMAT = DATA_DIR + '{date}/images/'
-sys.path.append(os.getcwd())
+data_dir = os.getcwd() + '/data/'
+fits_dir_format = data_dir + '{date}/fits/'
+lightcurves_dir_format = data_dir + '{date}/lightcurves/'
+images_dir_format = data_dir + '{date}/images/'
 
 
 FILTER_CADENCES = {
@@ -34,7 +32,34 @@ FILTER_CADENCES = {
 }
 
 
-def make_directories(date):
+def _update_dirs():
+
+    global fits_dir_format, lightcurves_dir_format, images_dir_format
+
+    fits_dir_format = data_dir + '{date}/fits/'
+    lightcurves_dir_format = data_dir + '{date}/lightcurves/'
+    images_dir_format = data_dir + '{date}/images/'
+
+
+def set_data_dir(new_dir: str):
+    """
+    Sets the output data directory containing the
+    fits, images, and lightcurves files.
+    TODO: Should we do this or have a config file?
+    """
+
+    global data_dir
+
+    if new_dir[-1] != '/':
+        new_dir += '/'
+
+    data_dir = new_dir
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+    _update_dirs()
+
+
+def make_directories(date: str):
     """
     Create the necessary directories for storing the FITS files,
     the lightcurve CSVs, and the images. The created directories
@@ -42,11 +67,11 @@ def make_directories(date):
     """
 
     dirs = [
-        DATA_DIR,
-        DATA_DIR + date + '/',
-        FITS_DIR_FORMAT.format(date=date),
-        LIGHTCURVES_DIR_FORMAT.format(date=date),
-        IMAGES_DIR_FORMAT.format(date=date)
+        data_dir,
+        f'{data_dir}{date}/',
+        fits_dir_format.format(date=date),
+        lightcurves_dir_format.format(date=date),
+        images_dir_format.format(date=date)
     ]
 
     for d in dirs:
@@ -146,7 +171,7 @@ def download_fits_parallel(
 
     date = start_time.strftime(air.DATE_FMT)
     make_directories(date=date)
-    out = FITS_DIR_FORMAT.format(date=date)
+    out = fits_dir_format.format(date=date)
     files = air.download_aia_between(
         start=start_time,
         end=end_time,
@@ -208,7 +233,7 @@ def download_fits(
         if b_save_files:
             for res in result[0]:
                 date = res[0].value.split(' ')[0].replace('-', '')
-                path = FITS_DIR_FORMAT.format(date=date)
+                path = fits_dir_format.format(date=date)
                 files += Fido.fetch(res, site='ROB', path=path, progress=b_show_progress)
         else:
             files += Fido.fetch(result, site='ROB', progress=b_show_progress)
@@ -216,7 +241,7 @@ def download_fits(
     return files
 
 
-def read_lightcurves(save_path):
+def read_lightcurves(save_path: str):
     """
     Read lightcurve data from the specified CSV file.
 

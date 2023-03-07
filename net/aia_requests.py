@@ -80,7 +80,7 @@ def download_aia_between(
             debug_print(f'done find {w} urls')
     
     if num_satisfied == len(wavelengths):
-        debug_print('all files locally available')
+        debug_print(f'all files locally available for wavelengths {wavelengths}, not downloading')
         return successful
 
     download_wrapper = functools.partial(actual_download_files, fits_out_dir)

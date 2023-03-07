@@ -1,13 +1,13 @@
 import typing
 
 import regions
-import sunpy.map
 import numpy as np
 import astropy.time
 import astropy.units as u
 
 from . import plotting, lightcurves, file_io, boxcar
 from .data_classes import RegionCanister
+
 
 class Observation():
 
@@ -17,7 +17,8 @@ class Observation():
         start_time: str | astropy.time.Time,
         end_time: str | astropy.time.Time,
         wavelengths: u.Quantity | typing.Iterable[u.Quantity],
-        boxcar_width: int | None=None,
+        boxcar_width: int | None = None,
+        out_dir: str = None
     ):
         """
         Parameters
@@ -31,6 +32,9 @@ class Observation():
         boxcar_width : int or None
             The width of the boxcar average performed on the lightcurve.
             If no width is specified, no average lightcurve is computed.
+        out_dir : str
+            Specify the output data directory. If None, the default in
+            file_io is used.
         """
 
         self.start = astropy.time.Time(start_time)
@@ -42,6 +46,9 @@ class Observation():
         self.data = {}
         # just need region metadata until drawing or making the lightcurve
         self.region_can = None
+
+        if out_dir is not None:
+            file_io.set_data_dir(out_dir)
 
         self._preprocess()
 
@@ -185,7 +192,7 @@ class Observation():
         Generates the path for the saved plot.
         """
 
-        root = self._build_path_root(file_io.IMAGES_DIR_FORMAT, wavelength)
+        root = self._build_path_root(file_io.images_dir_format, wavelength)
         fig_path = f'{root}_{plot_type}.png'
 
         return fig_path
@@ -196,7 +203,7 @@ class Observation():
         Generates the path for the saved lightcurve data.
         """
 
-        root = self._build_path_root(file_io.LIGHTCURVES_DIR_FORMAT, wavelength)
+        root = self._build_path_root(file_io.lightcurves_dir_format, wavelength)
         lc_path = f'{root}_lc.csv'
 
         return lc_path
