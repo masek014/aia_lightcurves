@@ -1,5 +1,6 @@
 import os
 import warnings
+from pathlib import Path
 
 import numpy as np
 import astropy.time
@@ -67,16 +68,13 @@ def make_directories(date: str):
     """
 
     dirs = [
-        data_dir,
-        f'{data_dir}{date}/',
         fits_dir_format.format(date=date),
         lightcurves_dir_format.format(date=date),
         images_dir_format.format(date=date)
     ]
 
     for d in dirs:
-        if not os.path.isdir(d):
-            os.mkdir(d)
+        Path(d).mkdir(parents=True, exist_ok=True)
 
 
 def gather_local_files(

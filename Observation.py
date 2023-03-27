@@ -50,8 +50,6 @@ class Observation():
         if out_dir is not None:
             file_io.set_data_dir(out_dir)
 
-        self._preprocess()
-
 
     def set_region(
         self,
@@ -125,7 +123,7 @@ class Observation():
             file_io.save_lightcurves((lightcurve[0], lightcurve[1]), csv_path)
 
 
-    def _preprocess(self):
+    def preprocess(self):
         """
         Prepares the data for creating the maps and lightcurves.
         The AIA FITS files are downloaded.
