@@ -61,6 +61,10 @@ def download_aia_between(
     download AIA fits files given the input args.
     only downloads the fits files not available locally in fits_out_dir.
     returns: the list of filenames that were downloaded as DownloadResults
+
+    Beware that the output is not necessarily ordered in any particular way.
+    If the files are available and read locally, then they are ordered by time.
+    Else, there's no particular order.
     '''
     
     num_satisfied = 0
@@ -119,19 +123,40 @@ def download_aia_between(
 
 
 @u.quantity_input
-def build_aia_urls(start: astropy.time.Time, end: astropy.time.Time, wavelength: u.Angstrom) -> list[str]:
+def build_aia_urls(
+    start: astropy.time.Time,
+    end: astropy.time.Time,
+    wavelength: u.Angstrom,
+    attempts: int=5
+) -> list[str]:
     '''
     build up the download URLS given start, end times and a single wavelength
-    '''
-    query_str = build_query_string(start, end, wavelength)
-    query_res = requests.request(
-        'POST',
-        afx.URL,
-        headers=afx.XML_HEAD,
-        data=query_str
-    )
 
-    file_ids = parse_file_ids(query_res.text)
+    TODO: This could maybe be handled better - currently the problem is
+    not well-understood. See issue #8:
+    https://github.com/masek014/aia_lightcurves/issues/8#issue-1696574742
+    '''
+
+    query_str = build_query_string(start, end, wavelength)
+    tries = 0
+    successful = False
+    while not successful and tries < attempts:
+        query_res = requests.request(
+            'POST',
+            afx.URL,
+            headers=afx.XML_HEAD,
+            data=query_str
+        )
+        try:
+            file_ids = parse_file_ids(query_res.text)
+            successful = True
+        except TypeError:
+            pass
+        tries += 1
+    if not successful:
+        raise RuntimeError('aia_requests.parse_files_ids not successful for '
+            f'wavelength {wavelength}\nlikely a server issue, so try again.')
+
     req_str = build_request_string(file_ids)
     urls_res = requests.request(
         'POST',
@@ -186,6 +211,10 @@ def parse_file_ids(query_response: str) -> list[str]:
 
     file_ids = []
     for item in wanted_items:
+        # print(wanted_items.__class__)
+        # print(item.__class__)
+        # print(item)
+        # print('record:', item['record'])
         records = item['record']['recorditem']
         for rec in records:
             file_ids.append(rec['fileid'])

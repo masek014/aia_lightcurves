@@ -152,7 +152,7 @@ def validate_local_files(
         if front_diff < (image_units % 1) * cadence:
             minimum_expected += 1
     
-    b_satisfied = minimum_expected==len(local_files)
+    b_satisfied = (minimum_expected==len(local_files))
 
     return local_files, b_satisfied
 
