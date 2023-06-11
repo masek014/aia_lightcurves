@@ -1,3 +1,5 @@
+import functools
+import multiprocessing as mp
 import os
 import warnings
 from pathlib import Path
@@ -77,6 +79,26 @@ def make_directories(date: str):
         Path(d).mkdir(parents=True, exist_ok=True)
 
 
+def _gather_local_files_helper(path, time_range, wavelength):
+
+    try:
+        with fits.open(path, output_verify='warn') as hdu:
+            hdr = hdu[1].header
+            obs_time = astropy.time.Time(hdr['DATE-OBS'], scale='utc', format='isot')
+            same_time = (obs_time >= time_range[0]) and (obs_time <= time_range[1])
+            same_wavelength = (wavelength == hdr['WAVELNTH'] * u.Unit(hdr['WAVEUNIT']))
+            if same_time and same_wavelength:
+                return obs_time, path
+                # times.append(obs_time)
+                # paths.append(path)
+    except OSError as e: # Catch empty or corrupted fits files and non-fits files
+        print(f'OSError with file {path}: {e}')
+    except AstropyUserWarning as e:
+        print(f'AstropyUserWarning with file {path}: {e}')
+
+    return None, None
+
+
 def gather_local_files(
     fits_dir: str,
     time_range: tuple[astropy.time.Time],
@@ -94,21 +116,15 @@ def gather_local_files(
     times = [] # Used for sorting the file names
     paths = []
     dir_files = [f for f in os.listdir(fits_dir) if os.path.isfile(os.path.join(fits_dir, f))]
-    for f in dir_files:
-        try:
-            path = os.path.join(fits_dir, f)
-            with fits.open(path, output_verify='warn') as hdu:
-                hdr = hdu[1].header
-                obs_time = astropy.time.Time(hdr['date-obs'], scale='utc', format='isot')
-                same_time = (obs_time >= time_range[0]) and (obs_time <= time_range[1])
-                same_wavelength = (wavelength == hdr['wavelnth'] * u.Unit(hdr['waveunit']))
-                if same_time and same_wavelength:
-                    times.append(obs_time)
-                    paths.append(path)
-        except OSError as e: # Catch empty or corrupted fits files and non-fits files
-            print(f'OSError with file {f}: {e}')
-        except AstropyUserWarning as e:
-            print(f'AstropyUserWarning with file {f}: {e}')
+    fits_paths = [os.path.join(fits_dir, f) for f in dir_files]
+
+    with mp.Pool(processes=mp.cpu_count()) as p:
+        outs = p.map(functools.partial(_gather_local_files_helper, time_range=time_range, wavelength=wavelength), fits_paths)
+
+    for o in outs:
+        if o[0] is not None:
+            times.append(o[0])
+            paths.append(o[1])
 
     paths = [f for _, f in sorted(zip(times, paths))]
 

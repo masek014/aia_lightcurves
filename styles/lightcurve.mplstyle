@@ -4,7 +4,6 @@ legend.fontsize     : 16
 figure.figsize      : 8, 4
 figure.dpi          : 240
 savefig.dpi         : 240
-savefig.bbox        : tight
 
 axes.titlesize      : 20
 axes.titlepad       : 8
