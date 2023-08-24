@@ -220,8 +220,12 @@ def add_region(
         Style parameters of the plotted region.
     """
 
+    if map_obj._meta['wavelnth'] in AIA_COLORMAP:
+        default_color = AIA_COLORMAP[map_obj._meta['wavelnth']]
+    else:
+        default_color = 'black'
     default_kwargs = {
-        'color': AIA_COLORMAP[map_obj._meta['wavelnth']],
+        'color': default_color,
         'linestyle': 'dashed',
         'linewidth': 2
     }
@@ -390,6 +394,7 @@ def plot_overview(
     lightcurve: Lightcurve,
     boxcar_width: int = None,
     map_kwargs: dict = {},
+    region_kwargs: dict = {},
     lc_kwargs: dict = {},
 ) -> tuple[matplotlib.figure.Figure, matplotlib.gridspec, matplotlib.gridspec]:
     """
@@ -433,13 +438,13 @@ def plot_overview(
     apply_style('map.mplstyle')
     map_ax = fig.add_subplot(gs_maps[0,0], projection=map_obj)
     plot_map(map_obj, fig, map_ax, **map_kwargs)
-    add_region(map_obj, map_ax, region)
+    add_region(map_obj, map_ax, region, **region_kwargs)
     map_ax.set_title('Full disk')
 
     submap_ = make_submap(map_obj, region)
     submap_ax = fig.add_subplot(gs_maps[0,1], projection=submap_)
     plot_map(submap_, fig, submap_ax, **map_kwargs)
-    add_region(submap_, submap_ax, region)
+    add_region(submap_, submap_ax, region, **region_kwargs)
     submap_ax.set_title('Selected region')
 
     apply_style('lightcurve.mplstyle')
