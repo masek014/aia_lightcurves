@@ -22,16 +22,16 @@ images_dir_format = data_dir + '{date}/images/'
 
 
 FILTER_CADENCES = {
-      94 * u.Angstrom : 12 * u.second,
-     131 * u.Angstrom : 12 * u.second,
-     171 * u.Angstrom : 12 * u.second,
-     193 * u.Angstrom : 12 * u.second,
-     211 * u.Angstrom : 12 * u.second,
-     304 * u.Angstrom : 12 * u.second,
-     335 * u.Angstrom : 12 * u.second,
-    1600 * u.Angstrom : 24 * u.second,
-    1700 * u.Angstrom : 24 * u.second,
-    4500 * u.Angstrom : 3600 * u.second,
+    94 * u.Angstrom: 12 * u.second,
+    131 * u.Angstrom: 12 * u.second,
+    171 * u.Angstrom: 12 * u.second,
+    193 * u.Angstrom: 12 * u.second,
+    211 * u.Angstrom: 12 * u.second,
+    304 * u.Angstrom: 12 * u.second,
+    335 * u.Angstrom: 12 * u.second,
+    1600 * u.Angstrom: 24 * u.second,
+    1700 * u.Angstrom: 24 * u.second,
+    4500 * u.Angstrom: 3600 * u.second,
 }
 
 
@@ -80,23 +80,21 @@ def make_directories(date: str):
 
 
 def _gather_local_files_helper(path, time_range, wavelength):
-
-    try:
+    # Catch the astropy fits warnings so we know which
+    # file caused it since astropy doesn't tell us...
+    # NB: not thread safe
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error')
         with fits.open(path, output_verify='warn') as hdu:
             hdr = hdu[1].header
-            obs_time = astropy.time.Time(hdr['DATE-OBS'], scale='utc', format='isot')
-            same_time = (obs_time >= time_range[0]) and (obs_time <= time_range[1])
-            same_wavelength = (wavelength == hdr['WAVELNTH'] * u.Unit(hdr['WAVEUNIT']))
+            obs_time = astropy.time.Time(
+                hdr['DATE-OBS'], scale='utc', format='isot')
+            same_time = (obs_time >= time_range[0]) and (
+                obs_time <= time_range[1])
+            same_wavelength = (
+                wavelength == hdr['WAVELNTH'] * u.Unit(hdr['WAVEUNIT']))
             if same_time and same_wavelength:
-                return obs_time, path
-                # times.append(obs_time)
-                # paths.append(path)
-    except OSError as e: # Catch empty or corrupted fits files and non-fits files
-        print(f'OSError with file {path}: {e}')
-    except AstropyUserWarning as e:
-        print(f'AstropyUserWarning with file {path}: {e}')
-
-    return None, None
+                return obs_time
 
 
 def gather_local_files(
@@ -108,28 +106,27 @@ def gather_local_files(
     Checks in_dir for AIA fits files that fall within the specified time_range.
     Returns a list of file paths sorted by time.
     """
-
-    # Catch the astropy fits warnings so we know which
-    # file caused it since astropy doesn't tell us...
-    warnings.filterwarnings('error')
-
-    times = [] # Used for sorting the file names
+    times = []  # Used for sorting the file names
     paths = []
-    dir_files = [f for f in os.listdir(fits_dir) if os.path.isfile(os.path.join(fits_dir, f))]
+    dir_files = [f for f in os.listdir(
+        fits_dir) if os.path.isfile(os.path.join(fits_dir, f))]
     fits_paths = [os.path.join(fits_dir, f) for f in dir_files]
 
-    with mp.Pool(processes=mp.cpu_count()) as p:
-        outs = p.map(functools.partial(_gather_local_files_helper, time_range=time_range, wavelength=wavelength), fits_paths)
-
-    for o in outs:
-        if o[0] is not None:
-            times.append(o[0])
-            paths.append(o[1])
+    for p in fits_paths:
+        try:
+            t = _gather_local_files_helper(
+                path=p,
+                time_range=time_range,
+                wavelength=wavelength
+            )
+            times.append(t)
+            paths.append(p)
+        except OSError as e:  # Catch empty or corrupted fits files and non-fits files
+            print(f'OSError with file {p}: {e}')
+        except AstropyUserWarning as e:
+            print(f'AstropyUserWarning with file {p}: {e}')
 
     paths = [f for _, f in sorted(zip(times, paths))]
-
-    warnings.resetwarnings()
-    
     return paths
 
 
@@ -157,18 +154,19 @@ def validate_local_files(
     image_units = duration.value / cadence.value
     minimum_expected = int(image_units)
     local_files = gather_local_files(fits_dir, time_range, wavelength)
-    
+
     # Correct for possible +1 file depending on
     # alignment of time_range with the image cadence.
     if local_files:
         with fits.open(local_files[0]) as hdu:
-            f_start = astropy.time.Time(hdu[1].header['date-obs'], scale='utc', format='isot')
+            f_start = astropy.time.Time(
+                hdu[1].header['date-obs'], scale='utc', format='isot')
         front_diff = (f_start - time_range[0]).to(u.second)
         front_diff = (front_diff.value % cadence.value) * u.second
         if front_diff < (image_units % 1) * cadence:
             minimum_expected += 1
-    
-    b_satisfied = (minimum_expected==len(local_files))
+
+    b_satisfied = (minimum_expected == len(local_files))
 
     return local_files, b_satisfied
 
@@ -178,8 +176,8 @@ def download_fits_parallel(
     start_time: astropy.time.Time,
     end_time: astropy.time.Time,
     wavelengths: list[u.Angstrom],
-    num_simultaneous_connections: int=5,
-    num_retries_for_failed: int=10
+    num_simultaneous_connections: int = 5,
+    num_retries_for_failed: int = 10
 ) -> list[air.DownloadResult]:
     ''' download fits in parallel using raw HTTP requests + XML '''
 
@@ -206,7 +204,7 @@ def download_fits(
     b_show_progress: bool = False
 ) -> list[str]:
     """
-    
+
     Use Fido to get the FITS files for the specified time interval and wavelength.
     This method may take considerable time to run because it serially uses Fido.
 
@@ -227,7 +225,7 @@ def download_fits(
         Specify whether to save the downloaded image data.
     b_show_progress : bool
         Specify whether to show the download progress.
-    
+
     Returns
     -------
     files : list of str
@@ -240,15 +238,16 @@ def download_fits(
     files = []
     for wavelength in wavelengths:
         result = Fido.search(
-            a.Time(start_time, end_time), 
-            a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom), 
+            a.Time(start_time, end_time),
+            a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom),
             a.Sample(12 * u.second)
         )
         if b_save_files:
             for res in result[0]:
                 date = res[0].value.split(' ')[0].replace('-', '')
                 path = fits_dir_format.format(date=date)
-                files += Fido.fetch(res, site='ROB', path=path, progress=b_show_progress)
+                files += Fido.fetch(res, site='ROB', path=path,
+                                    progress=b_show_progress)
         else:
             files += Fido.fetch(result, site='ROB', progress=b_show_progress)
 
@@ -263,7 +262,7 @@ def read_lightcurves(save_path: str):
     ----------
     save_path : str
         Path to the input CSV file.
-    
+
     Returns
     -------
     lightcurve : tuple
@@ -281,11 +280,13 @@ def read_lightcurves(save_path: str):
     )
 
     lightcurve = (data['time'], data['lc'])
-    
+
     return lightcurve
 
 
 LcArrays = tuple[np.ndarray | u.Quantity, np.ndarray | u.Quantity]
+
+
 def save_lightcurves(arrays: LcArrays, save_path: str):
     """
     Save lightcurve data to the specified CSV file.
