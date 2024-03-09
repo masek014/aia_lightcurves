@@ -159,7 +159,8 @@ def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
         apply_style('map.mplstyle')
         fig, ax = plt.subplots(
             figsize=(12,12),
-            subplot_kw={'projection':map_obj}
+            subplot_kw={'projection':map_obj},
+            layout='constrained'
         )
 
     map_obj.plot(axes=ax, **cb_kwargs)

@@ -1,9 +1,9 @@
-import typing
-
-import regions
-import numpy as np
-import astropy.time
 import astropy.units as u
+import astropy.time
+import matplotlib.pyplot as plt
+import numpy as np
+import regions
+import typing
 
 from . import plotting, lightcurves, file_io, boxcar
 from .data_classes import RegionCanister
@@ -146,10 +146,9 @@ class Observation():
                 start_time=self.start,
                 end_time=self.end,
                 wavelengths=[wavelength],
-                num_simultaneous_connections=8,
+                num_simultaneous_connections=1,
                 num_retries_for_failed=file_io.MAX_DOWNLOAD_ATTEMPTS,
             )
-
             reference_map = plotting.sunpy.map.Map(files[ref_index].file)
             self.data[wavelength] = dict(
                 files=[f.file for f in files],
@@ -232,6 +231,7 @@ class Observation():
 
         fig_path = self._build_figure_path(wavelength, 'overview')
         fig.savefig(fig_path, dpi=300, bbox_inches='tight')
+        plt.close()
 
 
     def _plot_summary(self, wavelength):
@@ -241,3 +241,4 @@ class Observation():
         fig_path = self._build_figure_path(wavelength, 'summary')
         d['fig'].set_layout_engine('constrained')
         d['fig'].savefig(fig_path, dpi=300)
+        plt.close()

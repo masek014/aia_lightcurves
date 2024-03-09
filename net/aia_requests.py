@@ -28,7 +28,10 @@ DATETIME_FMT = f'{DATE_FMT}{TIME_FMT}'
 
 URL_REF = astropy.time.Time(
     '1977-01-01T00:00:00.000', scale='tai', format='isot')
-URL_FMT = 'https://sdo7.nascom.nasa.gov/cgi-bin/drms_export.cgi?series=aia__lev1;compress=rice;record={wavelength}_{time}-{time}'
+URL_FMTS = [
+    'https://sdo7.nascom.nasa.gov/cgi-bin/drms_export.cgi?series=aia__lev1;compress=rice;record={wavelength}_{time}-{time}',
+    'http://netdrms01.nispdc.nso.edu/cgi-bin/netdrms/drms_export.cgi?series=aia__lev1;compress=rice;record={wavelength}_{time}-{time}'
+]
 
 
 @dataclass
@@ -314,11 +317,22 @@ def get_missing_urls(
     missing_urls = []
 
     for url in urls:
-        t = parse.parse(URL_FMT, url)['time']
-        t = URL_REF + astropy.time.TimeDelta(t, format='sec')
-        t = astropy.time.Time(t, scale='utc', format='isot')
-        if str(t) not in file_tais:
-            missing_urls.append(url)
+        handled = False
+        formats = URL_FMTS.copy()
+        while formats and not handled:
+            url_fmt = formats.pop(0)
+            parsed = parse.parse(url_fmt, url)
+            if parsed is not None:
+                t = parsed['time']
+                t = URL_REF + astropy.time.TimeDelta(t, format='sec')
+                t = astropy.time.Time(t, scale='utc', format='isot')
+                if str(t) not in file_tais:
+                    missing_urls.append(url)
+                handled = True
+            else:
+                debug_print(f'\nURL format {url_fmt} did not work for URL {url}.\nRetrying with other formats.')
+                if not formats:
+                    raise ValueError(f'No more URL formats to test. Could not find format that worked for url {url}')
 
     return missing_urls
 

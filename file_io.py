@@ -14,7 +14,7 @@ from sunpy.net import Fido, attrs as a
 from .net import aia_requests as air
 
 
-MAX_DOWNLOAD_ATTEMPTS = 3
+MAX_DOWNLOAD_ATTEMPTS = 10
 data_dir = os.getcwd() + '/data/'
 fits_dir_format = data_dir + '{date}/fits/'
 lightcurves_dir_format = data_dir + '{date}/lightcurves/'
@@ -79,7 +79,11 @@ def make_directories(date: str):
         Path(d).mkdir(parents=True, exist_ok=True)
 
 
-def _gather_local_files_helper(path, time_range, wavelength):
+def _gather_local_files_helper(
+    path: str,
+    time_range: tuple[astropy.time.Time, astropy.time.Time],
+    wavelength: u.Quantity
+) -> astropy.time.Time | None:
     # Catch the astropy fits warnings so we know which
     # file caused it since astropy doesn't tell us...
     # NB: not thread safe
@@ -99,7 +103,7 @@ def _gather_local_files_helper(path, time_range, wavelength):
 
 def gather_local_files(
     fits_dir: str,
-    time_range: tuple[astropy.time.Time],
+    time_range: tuple[astropy.time.Time, astropy.time.Time],
     wavelength: u.Quantity,
 ) -> list[str]:
     """
@@ -119,8 +123,9 @@ def gather_local_files(
                 time_range=time_range,
                 wavelength=wavelength
             )
-            times.append(t)
-            paths.append(p)
+            if t is not None:
+                times.append(t)
+                paths.append(p)
         except OSError as e:  # Catch empty or corrupted fits files and non-fits files
             print(f'OSError with file {p}: {e}')
         except AstropyUserWarning as e:
@@ -238,8 +243,8 @@ def download_fits(
     files = []
     for wavelength in wavelengths:
         result = Fido.search(
-            a.Time(start_time, end_time),
-            a.Instrument('aia'), a.Wavelength(wavelength*u.angstrom),
+            a.Time(start_time, end_time), 
+            a.Instrument('aia'), a.Wavelength(wavelength), 
             a.Sample(12 * u.second)
         )
         if b_save_files:
