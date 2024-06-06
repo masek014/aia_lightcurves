@@ -155,7 +155,7 @@ def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
     }
     cb_kwargs = {**default_kwargs, **cb_kwargs}
 
-    if fig is None:
+    if fig is None and ax is None:
         apply_style('map.mplstyle')
         fig, ax = plt.subplots(
             figsize=(12,12),

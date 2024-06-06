@@ -165,7 +165,8 @@ def build_aia_urls(
         try:
             file_ids = parse_file_ids(query_res.text)
             successful = True
-        except TypeError:
+        except TypeError as e:
+            print(e)
             pass
         tries += 1
     if not successful:
@@ -213,7 +214,7 @@ def parse_file_ids(query_response: str) -> list[str]:
     '''
     cut file IDs out of the AIA query response
     '''
-
+    
     parsed = xmltodict.parse(query_response)
     wanted_items = (
         parsed
@@ -221,8 +222,10 @@ def parse_file_ids(query_response: str) -> list[str]:
         ['soap:Body']
         ['VSO:QueryResponse']
         ['body']
-        ['provideritem']
-        [1:]
+        ['provideritem'][0]
+        ['record']
+        ['recorditem']
+        # [0:]
     )
 
     file_ids = []
@@ -231,9 +234,9 @@ def parse_file_ids(query_response: str) -> list[str]:
         # print(item.__class__)
         # print(item)
         # print('record:', item['record'])
-        records = item['record']['recorditem']
-        for rec in records:
-            file_ids.append(rec['fileid'])
+        # records = item['record']['recorditem']
+        # for rec in records:
+        file_ids.append(item['fileid'])
 
     return file_ids
 
