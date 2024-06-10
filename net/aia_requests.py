@@ -84,9 +84,8 @@ def download_aia_between(
     # do this sequentially because it's fast
     for w in wavelengths:
         w_files, w_satisfied = file_io.validate_local_files(
-            fits_out_dir, (start, end), w)
+            fits_out_dir, (start, end), w, level=1)
         num_satisfied += w_satisfied
-        successful += [DownloadResult(None, f) for f in w_files]
         if not w_satisfied:
             debug_print(f'start find {w} urls')
             w_urls = build_aia_urls(start, end, w)
@@ -96,7 +95,7 @@ def download_aia_between(
     if num_satisfied == len(wavelengths):
         debug_print(
             f'all files locally available for wavelengths {wavelengths}, not downloading')
-        return successful
+        return [] # nothing was downloaded
 
     download_wrapper = functools.partial(actual_download_files, fits_out_dir)
 
@@ -170,7 +169,7 @@ def build_aia_urls(
             pass
         tries += 1
     if not successful:
-        raise RuntimeError('aia_requests.parse_files_ids not successful for '
+        raise RuntimeError('aia_requests.parse_file_ids not successful for '
                            f'wavelength {wavelength}\nlikely a server issue, so try again.')
 
     req_str = build_request_string(file_ids)

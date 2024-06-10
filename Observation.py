@@ -142,16 +142,15 @@ class Observation():
             ref_index = 0
 
         for wavelength in self.wavelengths:
-            files = file_io.download_fits_parallel(
-                start_time=self.start,
-                end_time=self.end,
+            files = file_io.obtain_files(
+                time_range=(self.start, self.end),
                 wavelengths=[wavelength],
                 num_simultaneous_connections=1,
                 num_retries_for_failed=file_io.MAX_DOWNLOAD_ATTEMPTS,
             )
-            reference_map = plotting.sunpy.map.Map(files[ref_index].file)
+            reference_map = plotting.sunpy.map.Map(files[ref_index])
             self.data[wavelength] = dict(
-                files=[f.file for f in files],
+                files=files,
                 map=reference_map,
                 lightcurve=None
             )

@@ -1,16 +1,15 @@
-import functools
-import multiprocessing as mp
-import os
-import warnings
-from pathlib import Path
-
-import numpy as np
 import astropy.time
 import astropy.units as u
+import numpy as np
+import os
+import warnings
+
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyUserWarning
+from pathlib import Path
 from sunpy.net import Fido, attrs as a
 
+from . import calibrate
 from .net import aia_requests as air
 
 
@@ -82,7 +81,8 @@ def make_directories(date: str):
 def _gather_local_files_helper(
     path: str,
     time_range: tuple[astropy.time.Time, astropy.time.Time],
-    wavelength: u.Quantity
+    wavelength: u.Quantity,
+    level: float
 ) -> astropy.time.Time | None:
     # Catch the astropy fits warnings so we know which
     # file caused it since astropy doesn't tell us...
@@ -97,7 +97,9 @@ def _gather_local_files_helper(
                 obs_time <= time_range[1])
             same_wavelength = (
                 wavelength == hdr['WAVELNTH'] * u.Unit(hdr['WAVEUNIT']))
-            if same_time and same_wavelength:
+            same_level = (
+                level == float(hdr['LVL_NUM']))
+            if (same_time and same_wavelength) and same_level:
                 return obs_time
 
 
@@ -105,15 +107,17 @@ def gather_local_files(
     fits_dir: str,
     time_range: tuple[astropy.time.Time, astropy.time.Time],
     wavelength: u.Quantity,
+    level: float
 ) -> list[str]:
     """
-    Checks in_dir for AIA fits files that fall within the specified time_range.
+    Checks fits_dir for AIA fits files that fall within the specified time_range.
     Returns a list of file paths sorted by time.
     """
-    times = []  # Used for sorting the file names
+    times = [] # Used for sorting the file names
     paths = []
     dir_files = [f for f in os.listdir(
         fits_dir) if os.path.isfile(os.path.join(fits_dir, f))]
+    fits_dir = os.path.abspath(fits_dir)
     fits_paths = [os.path.join(fits_dir, f) for f in dir_files]
 
     for p in fits_paths:
@@ -121,7 +125,8 @@ def gather_local_files(
             t = _gather_local_files_helper(
                 path=p,
                 time_range=time_range,
-                wavelength=wavelength
+                wavelength=wavelength,
+                level=level
             )
             if t is not None:
                 times.append(t)
@@ -138,7 +143,8 @@ def gather_local_files(
 def validate_local_files(
     fits_dir: str,
     time_range: tuple[astropy.time.Time],
-    wavelength: u.angstrom
+    wavelength: u.angstrom,
+    level: float
 ) -> tuple[list[str], bool]:
     """
     Returns a list of all available local files and a boolean specifying
@@ -158,7 +164,7 @@ def validate_local_files(
     cadence = FILTER_CADENCES[wavelength]
     image_units = duration.value / cadence.value
     minimum_expected = int(image_units)
-    local_files = gather_local_files(fits_dir, time_range, wavelength)
+    local_files = gather_local_files(fits_dir, time_range, wavelength, level)
 
     # Correct for possible +1 file depending on
     # alignment of time_range with the image cadence.
@@ -176,15 +182,122 @@ def validate_local_files(
     return local_files, b_satisfied
 
 
+def identify_missing_l1p5(l1_files: list[str], l1p5_files: list[str]) -> list[str]:
+    """
+    Finds the level 1 files without a corresponding level 1.5 file.
+    """
+
+    def time_from_fits(file: str) -> astropy.time.Time:
+
+        with fits.open(file) as hdu:
+            hdr = hdu[1].header
+            time = astropy.time.Time(
+                hdr['DATE-OBS'], scale='utc', format='isot'
+            )
+
+        return time
+    
+    pairs = {}
+    for file in l1_files:
+        time = time_from_fits(file)
+        pairs[time] = {'L1': file, 'L1.5': None}
+    
+    for file in l1p5_files:
+        time = time_from_fits(file)
+        pairs[time]['L1.5'] = file
+    
+    l1_with_missing_l1p5 = []
+    for time, pair in pairs.items():
+        if pair['L1.5'] is None:
+            l1_with_missing_l1p5.append(pair['L1'])
+
+    return l1_with_missing_l1p5
+
+
+def obtain_files(
+    time_range: tuple[astropy.time.Time, astropy.time.Time],
+    wavelengths: list[u.Quantity],
+    num_simultaneous_connections: int = 1,
+    num_retries_for_failed: int = 10
+) -> list:
+    """
+    General purpose function for obtaining the desired files.
+    If all files are available locally, the list of those
+    files is returned. Otherwise, it will download the missing
+    files and return the **full** list of files (local+downloaded).
+    """
+    
+    date = time_range[0].strftime(air.DATE_FMT)
+    make_directories(date=date)
+    fits_dir = fits_dir_format.format(date=date)
+    all_files = []
+    for wavelength in wavelengths:
+
+        l1p5_files, l1p5_satisfied = validate_local_files(
+            fits_dir, time_range, wavelength, 1.5
+        )
+
+        l1_files, l1_satisfied = validate_local_files(
+            fits_dir, time_range, wavelength, 1
+        )
+
+        if l1p5_satisfied:
+            all_files += l1p5_files
+            continue
+        elif l1_satisfied:
+            lone_l1_companions = identify_missing_l1p5(l1_files, l1p5_files)
+        else:
+            results = download_fits_parallel(
+                *time_range,
+                [wavelength],
+                num_simultaneous_connections,
+                num_retries_for_failed
+            )
+            lone_l1_companions = [r.file for r in results]
+        
+        if lone_l1_companions:
+            print('level 1 files with missing level 1.5 companion:')
+            for file in lone_l1_companions:
+                print('\t', file)
+
+        new_l1p5_files = []
+        for l1_file in lone_l1_companions:
+            if 'lev1' in l1_file:
+                l1p5_file = l1_file.replace('lev1', 'lev1.5')
+            else:
+                l1p5_file = f'{Path(l1_file).stem}_lev1.5.{Path(l1_file).suffix}'
+            calibrate.level1_to_1p5(l1_file, l1p5_file, True, True)
+            new_l1p5_files.append(l1p5_file)
+        
+        if l1p5_files:
+            print('found l1.5 files:')
+            for file in l1p5_files:
+                print('\t', file)
+
+        if new_l1p5_files:
+            print('new l1.5 files:')
+            for file in new_l1p5_files:
+                print('\t', file)
+        
+        all_files += l1p5_files
+        all_files += new_l1p5_files
+
+    return all_files
+
+
 @u.quantity_input
 def download_fits_parallel(
     start_time: astropy.time.Time,
     end_time: astropy.time.Time,
     wavelengths: list[u.Angstrom],
-    num_simultaneous_connections: int = 5,
+    num_simultaneous_connections: int = 1,
     num_retries_for_failed: int = 10
 ) -> list[air.DownloadResult]:
-    ''' download fits in parallel using raw HTTP requests + XML '''
+    """
+    download fits in parallel using raw HTTP requests + XML
+    **Only returns the files that were downloaded, i.e. does
+    *not* return any files that may also be present locally.**
+    """
 
     date = start_time.strftime(air.DATE_FMT)
     make_directories(date=date)
@@ -201,7 +314,7 @@ def download_fits_parallel(
     return files
 
 
-def download_fits(
+def download_fits_old(
     start_time: str,
     end_time: str,
     wavelengths: int | list[int],
