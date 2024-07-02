@@ -218,7 +218,8 @@ def obtain_files(
     time_range: tuple[astropy.time.Time, astropy.time.Time],
     wavelengths: list[u.Quantity],
     num_simultaneous_connections: int = 1,
-    num_retries_for_failed: int = 10
+    num_retries_for_failed: int = 10,
+    level: float = 1.5
 ) -> list:
     """
     General purpose function for obtaining the desired files.
@@ -240,8 +241,9 @@ def obtain_files(
         l1_files, l1_satisfied = validate_local_files(
             fits_dir, time_range, wavelength, 1
         )
+        new_l1_files = []
 
-        if l1p5_satisfied:
+        if l1p5_satisfied and level == 1.5:
             all_files += l1p5_files
             continue
         elif l1_satisfied:
@@ -253,6 +255,7 @@ def obtain_files(
                 num_simultaneous_connections,
                 num_retries_for_failed
             )
+            new_l1_files = [r.file for r in results]
             lone_l1_companions = [r.file for r in results]
         
         if lone_l1_companions:
@@ -279,8 +282,12 @@ def obtain_files(
             for file in new_l1p5_files:
                 print('\t', file)
         
-        all_files += l1p5_files
-        all_files += new_l1p5_files
+        if level == 1:
+            all_files += l1_files
+            all_files += new_l1_files
+        elif level == 1.5:
+            all_files += l1p5_files
+            all_files += new_l1p5_files
 
     return all_files
 
