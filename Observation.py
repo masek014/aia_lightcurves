@@ -120,10 +120,14 @@ class Observation():
                 self._plot_summary(wavelength)
 
             csv_path = self._build_lightcurve_path(wavelength)
-            file_io.save_lightcurves((lightcurve[0], lightcurve[1]), csv_path)
+            file_io.save_lightcurves((lightcurve[0], lightcurve[1], lightcurve[2]), csv_path)
 
 
-    def preprocess(self, image_ref_time: str | astropy.time.Time = None):
+    def preprocess(
+        self,
+        image_ref_time: str | astropy.time.Time = None,
+        level: float = 1.5
+    ):
         """
         Prepares the data for creating the maps and lightcurves.
         The AIA FITS files are downloaded.
@@ -147,6 +151,7 @@ class Observation():
                 wavelengths=[wavelength],
                 num_simultaneous_connections=1,
                 num_retries_for_failed=file_io.MAX_DOWNLOAD_ATTEMPTS,
+                level=level
             )
             reference_map = plotting.sunpy.map.Map(files[ref_index])
             self.data[wavelength] = dict(
