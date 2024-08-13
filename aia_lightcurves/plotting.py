@@ -1,6 +1,3 @@
-import pathlib
-import regions
-import sunpy.map
 import astropy.time
 import astropy.units as u
 import matplotlib
@@ -10,6 +7,9 @@ import matplotlib.units as munits
 import matplotlib.gridspec as gridspec
 import numpy as np
 import numpy.typing
+import pathlib
+import regions
+import sunpy.map
 
 from datetime import datetime, timedelta
 from sunpy.net import attrs as a

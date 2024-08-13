@@ -1,11 +1,11 @@
-import typing
-from dataclasses import dataclass
-
-from astropy.coordinates import SkyCoord
 import astropy.time
 import astropy.units as u
 import regions
 import sunpy.map
+import typing
+
+from astropy.coordinates import SkyCoord
+from dataclasses import dataclass
 
 
 class Lightcurve(typing.NamedTuple):

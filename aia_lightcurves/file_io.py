@@ -264,23 +264,24 @@ def obtain_files(
                 print('\t', file)
 
         new_l1p5_files = []
-        for l1_file in lone_l1_companions:
-            if 'lev1' in l1_file:
-                l1p5_file = l1_file.replace('lev1', 'lev1.5')
-            else:
-                l1p5_file = f'{Path(l1_file).stem}_lev1.5.{Path(l1_file).suffix}'
-            calibrate.level1_to_1p5(l1_file, l1p5_file, True, True)
-            new_l1p5_files.append(l1p5_file)
-        
-        if l1p5_files:
-            print('found l1.5 files:')
-            for file in l1p5_files:
-                print('\t', file)
+        if level == 1.5:
 
-        if new_l1p5_files:
-            print('new l1.5 files:')
-            for file in new_l1p5_files:
-                print('\t', file)
+            for l1_file in lone_l1_companions:
+                if 'lev1' in l1_file:
+                    l1p5_file = l1_file.replace('lev1', 'lev1.5')
+                else:
+                    l1p5_file = f'{Path(l1_file).stem}_lev1.5.{Path(l1_file).suffix}'
+                calibrate.level1_to_1p5(l1_file, l1p5_file, True, True)
+                new_l1p5_files.append(l1p5_file)
+
+            if l1p5_files:
+                print('found l1.5 files:')
+                for file in l1p5_files:
+                    print('\t', file)
+            if new_l1p5_files:
+                print('new l1.5 files:')
+                for file in new_l1p5_files:
+                    print('\t', file)
         
         if level == 1:
             all_files += l1_files

@@ -1,0 +1,27 @@
+[project]
+dynamic = ["version"]
+requires-python = ">3.9"
+name = "aia_lightcurves"
+dependencies = [
+    "aiapy",
+    "astropy",
+    "matplotlib",
+    "numpy",
+    "regions",
+    "scipy",
+    "sunpy"
+]
+readme = "README.md"
+
+[build-system]
+requires = ["setuptools >= 61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-data]
+aia_lightcurves = ["styles/*", "net/*"]
+
+[tool.setuptools.packages.find]
+include = ["aia_lightcurves"]
+
+[tool.setuptools.dynamic]
+version = {attr = "aia_lightcurves.__version__"}

@@ -1,7 +1,7 @@
-import sunpy
-import numpy as np
 import astropy.time
 import astropy.units as u
+import numpy as np
+import sunpy
 
 from . import file_io, plotting, boxcar
 from .data_classes import Lightcurve, RegionCanister
