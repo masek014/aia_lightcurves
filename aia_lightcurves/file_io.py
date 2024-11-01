@@ -68,11 +68,19 @@ def make_directories(date: str):
     are: ./fits, ./lightcurves, and ./images.
     """
 
-    dirs = [
-        fits_dir_format.format(date=date),
-        lightcurves_dir_format.format(date=date),
-        images_dir_format.format(date=date)
-    ]
+    # dirs = [
+    #     fits_dir_format.format(date=date) if fits_dir_format is not None else None,
+    #     lightcurves_dir_format.format(date=date) if lightcurves_dir_format is not None else None,
+    #     images_dir_format.format(date=date) if images_dir_format is not None else None
+    # ]
+    
+    dirs = []
+    if fits_dir_format is not None:
+        dirs.append(fits_dir_format.format(date=date))
+    if lightcurves_dir_format is not None:
+        dirs.append(lightcurves_dir_format.format(date=date))
+    if images_dir_format is not None:
+        dirs.append(images_dir_format.format(date=date))
 
     for d in dirs:
         Path(d).mkdir(parents=True, exist_ok=True)

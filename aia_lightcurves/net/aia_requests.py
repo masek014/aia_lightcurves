@@ -231,7 +231,7 @@ def parse_file_ids(query_response: str) -> list[str]:
                 wanted_items = (
                     item
                     ['record']
-                    ['recorditem']
+                    ['recorditem'],
                 )
     else:
         return []
@@ -264,7 +264,7 @@ def extract_urls(request_result: str) -> list[str]:
         ['body']
         ['getdataresponseitem']
         ['getdataitem']
-        ['dataitem']
+        ['dataitem'],
     )
     return list(uu['url'] for uu in urlz)
 
