@@ -8,8 +8,10 @@ dependencies = [
     "matplotlib",
     "numpy",
     "regions",
+    "requests",
     "scipy",
-    "sunpy"
+    "sunpy",
+    "xmltodict"
 ]
 readme = "README.md"
 
@@ -18,7 +20,7 @@ requires = ["setuptools >= 61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
-aia_lightcurves = ["styles/*", "net/*"]
+aia_lightcurves = ["styles*", "net*"]
 
 [tool.setuptools.packages.find]
 include = ["aia_lightcurves"]

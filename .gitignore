@@ -1,7 +1,8 @@
-__pycache__/
-examples/data
-testing/
-build/
+__pycache__
+examples
+data
+testing
+build
 .DS_Store
 
 *.log

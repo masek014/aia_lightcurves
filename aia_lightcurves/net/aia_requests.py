@@ -95,7 +95,7 @@ def download_aia_between(
     if num_satisfied == len(wavelengths):
         debug_print(
             f'all files locally available for wavelengths {wavelengths}, not downloading')
-        return [] # nothing was downloaded
+        return []  # nothing was downloaded
 
     download_wrapper = functools.partial(actual_download_files, fits_out_dir)
 
@@ -161,13 +161,13 @@ def build_aia_urls(
             headers=afx.XML_HEAD,
             data=query_str
         )
-        try:
-            file_ids = parse_file_ids(query_res.text)
-            successful = True
-        except TypeError as e:
-            print('TypeError with parse_file_ids:')
-            print(e)
-            pass
+        # try:
+        file_ids = parse_file_ids(query_res.text)
+        successful = True
+        # except TypeError as e:
+        #     print('TypeError with parse_file_ids:')
+        #     print(e)
+        #     pass
         tries += 1
     if not successful:
         raise RuntimeError('aia_requests.parse_file_ids not successful for '
@@ -214,7 +214,6 @@ def parse_file_ids(query_response: str) -> list[str]:
     '''
     cut file IDs out of the AIA query response
     '''
-    
     parsed = xmltodict.parse(query_response)
     provider_items = (
         parsed
@@ -224,18 +223,20 @@ def parse_file_ids(query_response: str) -> list[str]:
         ['body']
         ['provideritem']
     )
-    
+
     if len(provider_items) > 0:
         for item in provider_items:
             if item['no_of_records_found'] != '0':
                 wanted_items = (
                     item
                     ['record']
-                    ['recorditem'],
+                    ['recorditem']
                 )
+                if item['no_of_records_found'] == '1':
+                    wanted_items = [wanted_items]
     else:
         return []
-    
+
     file_ids = []
     for item in wanted_items:
         file_ids.append(item['fileid'])
@@ -264,8 +265,11 @@ def extract_urls(request_result: str) -> list[str]:
         ['body']
         ['getdataresponseitem']
         ['getdataitem']
-        ['dataitem'],
+        ['dataitem']
     )
+    if isinstance(urlz, dict):  # Only one result
+        urlz = [urlz]
+
     return list(uu['url'] for uu in urlz)
 
 
@@ -335,9 +339,11 @@ def get_missing_urls(
                     missing_urls.append(url)
                 handled = True
             else:
-                debug_print(f'\nURL format {url_fmt} did not work for URL {url}.\nRetrying with other formats.')
+                debug_print(f'\nURL format {url_fmt} did not work for URL {
+                            url}.\nRetrying with other formats.')
                 if not formats:
-                    raise ValueError(f'No more URL formats to test. Could not find format that worked for url {url}')
+                    raise ValueError(
+                        f'No more URL formats to test. Could not find format that worked for url {url}')
 
     return missing_urls
 

@@ -7,6 +7,7 @@ import matplotlib.units as munits
 import matplotlib.gridspec as gridspec
 import numpy as np
 import numpy.typing
+import os
 import pathlib
 import regions
 import sunpy.map
@@ -22,21 +23,21 @@ from .data_classes import Lightcurve, RegionCanister
 MAP_X_LABEL = 'X (arcseconds)'
 MAP_Y_LABEL = 'Y (arcseconds)'
 AIA_COLORMAP = {
-    94  : 'red',
-    131 : 'red',
-    171 : 'cyan',
-    193 : 'cyan',
-    211 : 'cyan',
-    304 : 'cyan',
-    335 : 'red',
+    94: 'red',
+    131: 'red',
+    171: 'cyan',
+    193: 'cyan',
+    211: 'cyan',
+    304: 'cyan',
+    335: 'red',
     1600: 'red',
     1700: 'cyan'
-} # Sets compatible region colors for each AIA filter
+}  # Sets compatible region colors for each AIA filter
 
 
 def apply_style(style_sheet: str):
-    p = pathlib.Path(__file__)
-    plt.style.use(p.parent / f'styles/{style_sheet}')
+    style_path = os.path.join(os.path.dirname(__file__), 'styles', style_sheet)
+    plt.style.use(style_path)
 
 
 def apply_colorbar(
@@ -48,7 +49,7 @@ def apply_colorbar(
     Adds a custom colorbar to the figure.
     A new axes object is created to house the colorbar.
     Inspired by: https://stackoverflow.com/questions/18195758/set-matplotlib-colorbar-size-to-match-graph
-    
+
     Parameters
     ----------
     ax : matplotlib.axes.Axes
@@ -85,7 +86,7 @@ def get_map(
     """
     Query and return the most recent AIA
     image that Sunpy.Fido can get.
-    
+
     Parameters
     ----------
     wavelength : astropy.units.Quantity
@@ -100,7 +101,7 @@ def get_map(
     """
 
     past_time = map_time - timedelta(minutes=10)
-    info = ( a.Instrument('aia') & a.Wavelength(wavelength) )
+    info = (a.Instrument('aia') & a.Wavelength(wavelength))
     result = file_io.Fido.search(a.Time(past_time, map_time), info)
     file_download = file_io.Fido.fetch(
         result[0, -1],
@@ -109,7 +110,7 @@ def get_map(
     )
 
     aia_map = sunpy.map.Map(file_download[-1])
-    
+
     return aia_map
 
 
@@ -158,8 +159,8 @@ def plot_map(map_obj, fig=None, ax=None, **cb_kwargs):
     if fig is None and ax is None:
         apply_style('map.mplstyle')
         fig, ax = plt.subplots(
-            figsize=(12,12),
-            subplot_kw={'projection':map_obj},
+            figsize=(12, 12),
+            subplot_kw={'projection': map_obj},
             layout='constrained'
         )
 
@@ -208,7 +209,7 @@ def add_region(
 ):
     """
     Adds the provided region to ax.
-    
+
     Parameters
     ----------
     map_obj : sunpy.map.Map
@@ -249,7 +250,7 @@ def get_subregion_corners(
     map_obj : sunpy.map.Map
         The input map that the region is based on.
     region: regions.SkyRegion
-    
+
     Returns
     -------
     bl : SkyCoord
@@ -301,7 +302,8 @@ def get_region_data(
     reg_mask = (region.to_pixel(map_obj.wcs)).to_mask()
     xmin, xmax = reg_mask.bbox.ixmin, reg_mask.bbox.ixmax
     ymin, ymax = reg_mask.bbox.iymin, reg_mask.bbox.iymax
-    region_data = np.where(reg_mask.data==1, map_data[ymin:ymax, xmin:xmax], fill_value)
+    region_data = np.where(
+        reg_mask.data == 1, map_data[ymin:ymax, xmin:xmax], fill_value)
 
     if b_full_size:
         a = np.full(
@@ -317,8 +319,8 @@ def get_region_data(
 
 def plot_lightcurve(
     lightcurve: Lightcurve,
-    fig: matplotlib.figure.Figure | None= None,
-    ax: matplotlib.axes.Axes | None= None,
+    fig: matplotlib.figure.Figure | None = None,
+    ax: matplotlib.axes.Axes | None = None,
     **plot_kwargs
 ) -> tuple[matplotlib.figure.Figure, matplotlib.axes]:
     """
@@ -383,7 +385,8 @@ def make_overview_gridspec(
 
     fig = plt.figure(figsize=(20, 14))
     gs = fig.add_gridspec(2, 1, height_ratios=[2, 1], hspace=0.3)
-    gs_maps = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0], wspace=0.4)
+    gs_maps = gridspec.GridSpecFromSubplotSpec(
+        1, 2, subplot_spec=gs[0], wspace=0.4)
     gs_lc = gs[1].subgridspec(2, 1, hspace=0)
 
     return fig, gs_maps, gs_lc
@@ -437,19 +440,19 @@ def plot_overview(
     fig.suptitle(f'AIA {wavelength} {map_time}', fontsize=24)
 
     apply_style('map.mplstyle')
-    map_ax = fig.add_subplot(gs_maps[0,0], projection=map_obj)
+    map_ax = fig.add_subplot(gs_maps[0, 0], projection=map_obj)
     plot_map(map_obj, fig, map_ax, **map_kwargs)
     add_region(map_obj, map_ax, region, **region_kwargs)
     map_ax.set_title('Full disk')
 
     submap_ = make_submap(map_obj, region)
-    submap_ax = fig.add_subplot(gs_maps[0,1], projection=submap_)
+    submap_ax = fig.add_subplot(gs_maps[0, 1], projection=submap_)
     plot_map(submap_, fig, submap_ax, **map_kwargs)
     add_region(submap_, submap_ax, region, **region_kwargs)
     submap_ax.set_title('Selected region')
 
     apply_style('lightcurve.mplstyle')
-    lightcurve_ax = fig.add_subplot(gs_lc[0,:])
+    lightcurve_ax = fig.add_subplot(gs_lc[0, :])
 
     plot_lightcurve(
         lightcurve,
@@ -474,20 +477,22 @@ def plot_overview(
         plt.setp(lightcurve_ax.get_xticklabels(), visible=False)
         lightcurve_ax.legend()
 
-        detrended_ax = fig.add_subplot(gs_lc[1,:])
+        detrended_ax = fig.add_subplot(gs_lc[1, :])
         detrended = lc.make_detrended_lightcurve(lightcurve, averaged)
-        plot_lightcurve(detrended, fig, detrended_ax, color='purple', label='Detrended')
-        
+        plot_lightcurve(detrended, fig, detrended_ax,
+                        color='purple', label='Detrended')
+
         detrended_ax.set(ylabel='Residual')
-        detrended_ax.axhline(y=0, color='gray', linestyle='dotted', linewidth=0.6)
+        detrended_ax.axhline(
+            y=0, color='gray', linestyle='dotted', linewidth=0.6)
         [xmin, xmax, ymin, ymax] = lightcurve_ax.axis()
-        detrended_ax.set_xlim(left=xmin, right=xmax)        
+        detrended_ax.set_xlim(left=xmin, right=xmax)
 
     return fig, gs_maps, gs_lc
 
 
 def summary_lightcurves(dat: Lightcurve) -> dict[str, object]:
-    
+
     apply_style('summary.mplstyle')
 
     sorted_dat = lc.sort_by_time(dat)
@@ -512,7 +517,8 @@ def summary_lightcurves(dat: Lightcurve) -> dict[str, object]:
     exp_ax.scatter(dtimes, ets, color='blue', s=2)
     exp_ax.set(ylabel='Exposure time per frame [s]')
 
-    norm_ax.plot(dtimes, np.array(sorted_dat.y) / np.array(ets), color='blue', **shared_kw)
+    norm_ax.plot(dtimes, np.array(sorted_dat.y) /
+                 np.array(ets), color='blue', **shared_kw)
     norm_ax.set(ylabel='Normalized light curve [arb / sec]')
 
     munits.registry[datetime] = orig
@@ -525,13 +531,15 @@ def summary_lightcurves(dat: Lightcurve) -> dict[str, object]:
 
 
 InsetRet = dict[str, matplotlib.figure.Figure | matplotlib.axes.Axes]
+
+
 def plot_inset_region(
-     fits_path: str | pathlib.Path,
-     region_can: RegionCanister,
-     fig: matplotlib.figure.Figure | None=None,
-     ax: matplotlib.axes.Axes | None=None,
-     reg_kw: dict[str, object] | None=None,
-     inset_position: numpy.typing.ArrayLike | None=None
+    fits_path: str | pathlib.Path,
+    region_can: RegionCanister,
+    fig: matplotlib.figure.Figure | None = None,
+    ax: matplotlib.axes.Axes | None = None,
+    reg_kw: dict[str, object] | None = None,
+    inset_position: numpy.typing.ArrayLike | None = None
 ) -> InsetRet:
     """
     inset_position can be specified by either fractions of the plotting
@@ -549,12 +557,12 @@ def plot_inset_region(
     # The submap overrides whatever the user specifies with
     # inset_position, so it may be confusing.
     bottom_left = SkyCoord(
-         *(region_can.center - hw*pad_mult),
-         frame=m.coordinate_frame
+        *(region_can.center - hw*pad_mult),
+        frame=m.coordinate_frame
     )
     top_right = SkyCoord(
-         *(region_can.center + hw*pad_mult) << u.arcsec,
-         frame=m.coordinate_frame
+        *(region_can.center + hw*pad_mult) << u.arcsec,
+        frame=m.coordinate_frame
     )
 
     subm = m.submap(bottom_left=bottom_left, top_right=top_right)
@@ -567,7 +575,7 @@ def plot_inset_region(
     main_tick_col = 'gray'
     ax.coords.frame.set_color(main_tick_col)
     for crd in ax.coords:
-         crd.tick_params(color=main_tick_col)
+        crd.tick_params(color=main_tick_col)
 
     pos = inset_position or [0.35, 0.35, 0.3, 0.3]
 
@@ -590,11 +598,11 @@ def plot_inset_region(
 
     axins = ax.inset_axes(pos, projection=subm, transform=transform)
     subm.plot(annotate=False, axes=axins, title=False)
-    
+
     skc = SkyCoord(*region_can.center, frame=m.coordinate_frame)
     reg = region_can.kind(
-         skc,
-         **region_can.constructor_kwargs
+        skc,
+        **region_can.constructor_kwargs
     )
     default = dict(lw=2, color='lightblue', ls='dashed')
     reg_kw = default | (reg_kw or dict())
@@ -605,18 +613,18 @@ def plot_inset_region(
     x0, y0 = bottom_left.to_pixel(m.wcs)
     x1, y1 = top_right.to_pixel(m.wcs)
     ax.indicate_inset(
-         bounds=(x0, y0, x1 - x0, y1 - y0),
-         inset_ax=axins,
-         edgecolor=indic_col,
-         linewidth=1,
-         alpha=indic_col[-1]
+        bounds=(x0, y0, x1 - x0, y1 - y0),
+        inset_ax=axins,
+        edgecolor=indic_col,
+        linewidth=1,
+        alpha=indic_col[-1]
     )
 
     for crd in axins.coords:
-         crd.set_ticks_visible(False)
-         crd.set_ticklabel_visible(False)
+        crd.set_ticks_visible(False)
+        crd.set_ticklabel_visible(False)
     axins.set(
-         title=' ', xlabel=' ', ylabel=' ',
+        title=' ', xlabel=' ', ylabel=' ',
     )
     axins.coords.frame.set_color(indic_col)
     axins.grid(False)

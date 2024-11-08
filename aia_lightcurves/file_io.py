@@ -14,10 +14,10 @@ from .net import aia_requests as air
 
 
 MAX_DOWNLOAD_ATTEMPTS = 10
-data_dir = os.getcwd() + '/data/'
-fits_dir_format = data_dir + '{date}/fits/'
-lightcurves_dir_format = data_dir + '{date}/lightcurves/'
-images_dir_format = data_dir + '{date}/images/'
+data_dir = os.path.join(os.getcwd(), 'data')
+fits_dir_format = os.path.join(data_dir, '{date}', 'fits')
+lightcurves_dir_format = os.path.join(data_dir, '{date}', 'lightcurves')
+images_dir_format = os.path.join(data_dir, '{date}', 'images')
 
 
 FILTER_CADENCES = {
@@ -38,9 +38,9 @@ def _update_dirs():
 
     global fits_dir_format, lightcurves_dir_format, images_dir_format
 
-    fits_dir_format = data_dir + '{date}/fits/'
-    lightcurves_dir_format = data_dir + '{date}/lightcurves/'
-    images_dir_format = data_dir + '{date}/images/'
+    fits_dir_format = os.path.join(data_dir, '{date}', 'fits')
+    lightcurves_dir_format = os.path.join(data_dir, '{date}', 'lightcurves')
+    images_dir_format = os.path.join(data_dir, '{date}', 'images')
 
 
 def set_data_dir(new_dir: str):
@@ -51,10 +51,6 @@ def set_data_dir(new_dir: str):
     """
 
     global data_dir
-
-    if new_dir[-1] != '/':
-        new_dir += '/'
-
     data_dir = new_dir
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
@@ -73,7 +69,7 @@ def make_directories(date: str):
     #     lightcurves_dir_format.format(date=date) if lightcurves_dir_format is not None else None,
     #     images_dir_format.format(date=date) if images_dir_format is not None else None
     # ]
-    
+
     dirs = []
     if fits_dir_format is not None:
         dirs.append(fits_dir_format.format(date=date))
@@ -121,7 +117,7 @@ def gather_local_files(
     Checks fits_dir for AIA fits files that fall within the specified time_range.
     Returns a list of file paths sorted by time.
     """
-    times = [] # Used for sorting the file names
+    times = []  # Used for sorting the file names
     paths = []
     dir_files = [f for f in os.listdir(
         fits_dir) if os.path.isfile(os.path.join(fits_dir, f))]
@@ -204,16 +200,16 @@ def identify_missing_l1p5(l1_files: list[str], l1p5_files: list[str]) -> list[st
             )
 
         return time
-    
+
     pairs = {}
     for file in l1_files:
         time = time_from_fits(file)
         pairs[time] = {'L1': file, 'L1.5': None}
-    
+
     for file in l1p5_files:
         time = time_from_fits(file)
         pairs[time]['L1.5'] = file
-    
+
     l1_with_missing_l1p5 = []
     for time, pair in pairs.items():
         if pair['L1.5'] is None:
@@ -235,7 +231,7 @@ def obtain_files(
     files is returned. Otherwise, it will download the missing
     files and return the **full** list of files (local+downloaded).
     """
-    
+
     date = time_range[0].strftime(air.DATE_FMT)
     make_directories(date=date)
     fits_dir = fits_dir_format.format(date=date)
@@ -265,7 +261,7 @@ def obtain_files(
             )
             new_l1_files = [r.file for r in results]
             lone_l1_companions = [r.file for r in results]
-        
+
         if lone_l1_companions:
             print('level 1 files with missing level 1.5 companion:')
             for file in lone_l1_companions:
@@ -278,7 +274,8 @@ def obtain_files(
                 if 'lev1' in l1_file:
                     l1p5_file = l1_file.replace('lev1', 'lev1.5')
                 else:
-                    l1p5_file = f'{Path(l1_file).stem}_lev1.5.{Path(l1_file).suffix}'
+                    l1p5_file = f'{Path(l1_file).stem}_lev1.5.{
+                        Path(l1_file).suffix}'
                 calibrate.level1_to_1p5(l1_file, l1p5_file, True, True)
                 new_l1p5_files.append(l1p5_file)
 
@@ -290,7 +287,7 @@ def obtain_files(
                 print('new l1.5 files:')
                 for file in new_l1p5_files:
                     print('\t', file)
-        
+
         if level == 1:
             all_files += l1_files
             all_files += new_l1_files
@@ -372,8 +369,8 @@ def download_fits_old(
     files = []
     for wavelength in wavelengths:
         result = Fido.search(
-            a.Time(start_time, end_time), 
-            a.Instrument('aia'), a.Wavelength(wavelength), 
+            a.Time(start_time, end_time),
+            a.Instrument('aia'), a.Wavelength(wavelength),
             a.Sample(12 * u.second)
         )
         if b_save_files:
