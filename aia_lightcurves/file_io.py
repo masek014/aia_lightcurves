@@ -274,8 +274,8 @@ def obtain_files(
                 if 'lev1' in l1_file:
                     l1p5_file = l1_file.replace('lev1', 'lev1.5')
                 else:
-                    l1p5_file = f'{Path(l1_file).stem}_lev1.5.{
-                        Path(l1_file).suffix}'
+                    l1p5_file = f'{Path(l1_file).stem}' \
+                                f'_lev1.5.{Path(l1_file).suffix}'
                 calibrate.level1_to_1p5(l1_file, l1p5_file, True, True)
                 new_l1p5_files.append(l1p5_file)
 

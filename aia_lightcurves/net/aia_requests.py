@@ -339,8 +339,9 @@ def get_missing_urls(
                     missing_urls.append(url)
                 handled = True
             else:
-                debug_print(f'\nURL format {url_fmt} did not work for URL {
-                            url}.\nRetrying with other formats.')
+                debug_print(
+                    f'\nURL format {url_fmt} did not work for '
+                    f'URL {url}.\nRetrying with other formats.')
                 if not formats:
                     raise ValueError(
                         f'No more URL formats to test. Could not find format that worked for url {url}')
