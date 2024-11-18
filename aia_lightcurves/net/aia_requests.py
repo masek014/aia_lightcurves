@@ -287,7 +287,7 @@ def actual_download_files(output_directory: str, url: str) -> DownloadResult:
             fn = parse_filename(res.headers['Content-Disposition'])
             file_size = int(res.headers['Content-Length'])
 
-            full_fn = f'{output_directory}/{fn}'
+            full_fn = os.path.join(output_directory, fn)
             if os.path.exists(full_fn) and os.stat(full_fn).st_size == file_size:
                 debug_print('file already exists and is downloaded:', full_fn)
                 debug_print()
