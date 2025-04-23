@@ -223,7 +223,8 @@ def obtain_files(
     wavelengths: list[u.Quantity],
     num_simultaneous_connections: int = 1,
     num_retries_for_failed: int = 10,
-    level: float = 1.5
+    level: float = 1.5,
+    ignore_failed: bool = True
 ) -> list:
     """
     General purpose function for obtaining the desired files.
@@ -259,6 +260,12 @@ def obtain_files(
                 num_simultaneous_connections,
                 num_retries_for_failed
             )
+            if ignore_failed:
+                successful = []
+                for res in results:
+                    if res.success:
+                        successful.append(res)
+                results = successful
             new_l1_files = [r.file for r in results]
             lone_l1_companions = [r.file for r in results]
 
