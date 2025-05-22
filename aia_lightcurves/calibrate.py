@@ -34,7 +34,7 @@ def level1_to_1p5(
                 map_, pointing_table=pointing_table)
             map_registered = aiapy.calibrate.register(map_pointing_corrected)
             successful = True
-        except urllib.error.URLError as e:
+        except (urllib.error.URLError, OSError) as e:
             print(
                 f'[attempt {attempt} / 5] Timeout while performing correction to level 1.5\n{e}')
             attempt += 1

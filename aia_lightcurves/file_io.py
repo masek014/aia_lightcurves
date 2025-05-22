@@ -224,7 +224,7 @@ def obtain_files(
     num_simultaneous_connections: int = 1,
     num_retries_for_failed: int = 10,
     level: float = 1.5,
-    ignore_failed: bool = True
+    email_address: str | None = None
 ) -> list:
     """
     General purpose function for obtaining the desired files.
@@ -232,7 +232,7 @@ def obtain_files(
     files is returned. Otherwise, it will download the missing
     files and return the **full** list of files (local+downloaded).
     """
-
+    
     date = time_range[0].strftime(air.DATE_FMT)
     make_directories(date=date)
     fits_dir = fits_dir_format.format(date=date)
@@ -260,15 +260,18 @@ def obtain_files(
                 num_simultaneous_connections,
                 num_retries_for_failed
             )
-            if ignore_failed:
-                successful = []
-                for res in results:
-                    if res.success:
-                        successful.append(res)
-                results = successful
             new_l1_files = [r.file for r in results]
             lone_l1_companions = [r.file for r in results]
 
+            # import copy
+            # files = download_fits_jsoc(
+            #     *time_range,
+            #     [wavelength],
+            #     email_address='masek014@umn.edu'
+            # )
+            # new_l1_files = copy.deepcopy(files)
+            # lone_l1_companions = copy.deepcopy(files)
+        
         if lone_l1_companions:
             print('level 1 files with missing level 1.5 companion:')
             for file in lone_l1_companions:
@@ -281,8 +284,7 @@ def obtain_files(
                 if 'lev1' in l1_file:
                     l1p5_file = l1_file.replace('lev1', 'lev1.5')
                 else:
-                    l1p5_file = f'{Path(l1_file).stem}' \
-                                f'_lev1.5.{Path(l1_file).suffix}'
+                    l1p5_file = f'{Path(l1_file).stem}_lev1.5.{Path(l1_file).suffix}'
                 calibrate.level1_to_1p5(l1_file, l1p5_file, True, True)
                 new_l1p5_files.append(l1p5_file)
 
@@ -294,7 +296,7 @@ def obtain_files(
                 print('new l1.5 files:')
                 for file in new_l1p5_files:
                     print('\t', file)
-
+        
         if level == 1:
             all_files += l1_files
             all_files += new_l1_files
@@ -330,6 +332,30 @@ def download_fits_parallel(
         num_jobs=num_simultaneous_connections,
         attempts=num_retries_for_failed
     )
+
+    return files
+
+
+def download_fits_jsoc(
+    start_time: astropy.time.Time,
+    end_time: astropy.time.Time,
+    wavelength: u.Quantity,
+    email_address: str,
+) -> list[str]:
+    """
+    Obtains level 1 AIA files through the JSOC servers.
+    email_address must be an email address that is registered
+    with the JSOC!
+    """
+    result = Fido.search(
+        a.Time(start_time, end_time),
+        a.Wavelength(wavelength),
+        a.Sample(12*u.s),
+        a.jsoc.Series.aia_lev1_euv_12s,
+        a.jsoc.Notify(email_address))
+    date = start_time.strftime(air.DATE_FMT)
+    out_dir = fits_dir_format.format(date=date)
+    files = Fido.fetch(result, path=out_dir)
 
     return files
 
