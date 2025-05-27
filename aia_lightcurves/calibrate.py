@@ -53,6 +53,8 @@ def level1_to_1p5(
         hdu_type=fits.CompImageHDU,
         overwrite=overwrite_existing
     )
+    with fits.open(level1p5_file, mode='update') as hdu:
+        hdu[1].header['LVL_NUM'] = 1.5
 
 
 # ... add the other (optional) calibration functions too?

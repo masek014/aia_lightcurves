@@ -1,12 +1,15 @@
-import astropy.time
-import astropy.units as u
-import numpy as np
+import copy
 import os
 import warnings
 
+from pathlib import Path
+
+import astropy.time
+import astropy.units as u
+import numpy as np
+
 from astropy.io import fits
 from astropy.utils.exceptions import AstropyUserWarning
-from pathlib import Path
 from sunpy.net import Fido, attrs as a
 
 from . import calibrate
@@ -91,20 +94,18 @@ def _gather_local_files_helper(
     # Catch the astropy fits warnings so we know which
     # file caused it since astropy doesn't tell us...
     # NB: not thread safe
-    with warnings.catch_warnings():
-        warnings.filterwarnings('error')
-        with fits.open(path, output_verify='warn') as hdu:
-            hdr = hdu[1].header
-            obs_time = astropy.time.Time(
-                hdr['DATE-OBS'], scale='utc', format='isot')
-            same_time = (obs_time >= time_range[0]) and (
-                obs_time <= time_range[1])
-            same_wavelength = (
-                wavelength == hdr['WAVELNTH'] * u.Unit(hdr['WAVEUNIT']))
-            same_level = (
-                level == float(hdr['LVL_NUM']))
-            if (same_time and same_wavelength) and same_level:
-                return obs_time
+    with fits.open(path, output_verify='warn', ignore_blank=True) as hdu:
+        hdr = hdu[1].header
+        obs_time = astropy.time.Time(
+            hdr['DATE-OBS'], scale='utc', format='isot')
+        same_time = (obs_time >= time_range[0]) and (
+            obs_time <= time_range[1])
+        same_wavelength = (
+            wavelength == hdr['WAVELNTH'] * u.Unit(hdr['WAVEUNIT']))
+        same_level = (
+            level == float(hdr['LVL_NUM']))
+        if (same_time and same_wavelength) and same_level:
+            return obs_time
 
 
 def gather_local_files(
@@ -137,8 +138,6 @@ def gather_local_files(
                 paths.append(p)
         except OSError as e:  # Catch empty or corrupted fits files and non-fits files
             print(f'OSError with file {p}: {e}')
-        except AstropyUserWarning as e:
-            print(f'AstropyUserWarning with file {p}: {e}')
 
     paths = [f for _, f in sorted(zip(times, paths))]
     return paths
@@ -232,7 +231,7 @@ def obtain_files(
     files is returned. Otherwise, it will download the missing
     files and return the **full** list of files (local+downloaded).
     """
-    
+
     date = time_range[0].strftime(air.DATE_FMT)
     make_directories(date=date)
     fits_dir = fits_dir_format.format(date=date)
@@ -240,12 +239,9 @@ def obtain_files(
     for wavelength in wavelengths:
 
         l1p5_files, l1p5_satisfied = validate_local_files(
-            fits_dir, time_range, wavelength, 1.5
-        )
-
+            fits_dir, time_range, wavelength, 1.5)
         l1_files, l1_satisfied = validate_local_files(
-            fits_dir, time_range, wavelength, 1
-        )
+            fits_dir, time_range, wavelength, 1)
         new_l1_files = []
 
         if l1p5_satisfied and level == 1.5:
@@ -254,24 +250,23 @@ def obtain_files(
         elif l1_satisfied:
             lone_l1_companions = identify_missing_l1p5(l1_files, l1p5_files)
         else:
-            results = download_fits_parallel(
-                *time_range,
-                [wavelength],
-                num_simultaneous_connections,
-                num_retries_for_failed
-            )
-            new_l1_files = [r.file for r in results]
-            lone_l1_companions = [r.file for r in results]
-
-            # import copy
-            # files = download_fits_jsoc(
+            # results = download_fits_parallel(
             #     *time_range,
             #     [wavelength],
-            #     email_address='masek014@umn.edu'
+            #     num_simultaneous_connections,
+            #     num_retries_for_failed
             # )
-            # new_l1_files = copy.deepcopy(files)
-            # lone_l1_companions = copy.deepcopy(files)
-        
+            # new_l1_files = [r.file for r in results]
+            # lone_l1_companions = [r.file for r in results]
+
+            files = download_fits_jsoc(
+                *time_range,
+                wavelength,
+                email_address='masek014@umn.edu'
+            )
+            new_l1_files = copy.deepcopy(files)
+            lone_l1_companions = copy.deepcopy(files)
+
         if lone_l1_companions:
             print('level 1 files with missing level 1.5 companion:')
             for file in lone_l1_companions:
@@ -296,7 +291,7 @@ def obtain_files(
                 print('new l1.5 files:')
                 for file in new_l1p5_files:
                     print('\t', file)
-        
+
         if level == 1:
             all_files += l1_files
             all_files += new_l1_files
@@ -352,6 +347,7 @@ def download_fits_jsoc(
         a.Wavelength(wavelength),
         a.Sample(12*u.s),
         a.jsoc.Series.aia_lev1_euv_12s,
+        a.jsoc.Segment.image,
         a.jsoc.Notify(email_address))
     date = start_time.strftime(air.DATE_FMT)
     out_dir = fits_dir_format.format(date=date)
