@@ -126,7 +126,8 @@ class Observation():
     def preprocess(
         self,
         image_ref_time: str | astropy.time.Time = None,
-        level: float = 1.5
+        level: float = 1.5,
+        email_address: str | None = None
     ):
         """
         Prepares the data for creating the maps and lightcurves.
@@ -151,7 +152,8 @@ class Observation():
                 wavelengths=[wavelength],
                 num_simultaneous_connections=1,
                 num_retries_for_failed=file_io.MAX_DOWNLOAD_ATTEMPTS,
-                level=level
+                level=level,
+                email_address=email_address
             )
             reference_map = plotting.sunpy.map.Map(files[ref_index])
             self.data[wavelength] = dict(
