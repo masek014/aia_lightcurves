@@ -35,6 +35,17 @@ FILTER_CADENCES = {
     1700 * u.Angstrom: 24 * u.second,
     4500 * u.Angstrom: 3600 * u.second,
 }
+FILTER_SERIES = {
+    94 * u.Angstrom: a.jsoc.Series.aia_lev1_euv_12s,
+    131 * u.Angstrom: a.jsoc.Series.aia_lev1_euv_12s,
+    171 * u.Angstrom: a.jsoc.Series.aia_lev1_euv_12s,
+    193 * u.Angstrom: a.jsoc.Series.aia_lev1_euv_12s,
+    211 * u.Angstrom: a.jsoc.Series.aia_lev1_euv_12s,
+    304 * u.Angstrom: a.jsoc.Series.aia_lev1_euv_12s,
+    335 * u.Angstrom: a.jsoc.Series.aia_lev1_euv_12s,
+    1600 * u.Angstrom: a.jsoc.Series.aia_lev1_uv_24s,
+    1700 * u.Angstrom: a.jsoc.Series.aia_lev1_uv_24s,
+}
 
 
 def _update_dirs():
@@ -346,7 +357,7 @@ def download_fits_jsoc(
         a.Time(start_time, end_time),
         a.Wavelength(wavelength),
         a.Sample(12*u.s),
-        a.jsoc.Series.aia_lev1_euv_12s,
+        FILTER_SERIES[wavelength],
         a.jsoc.Segment.image,
         a.jsoc.Notify(email_address))
     date = start_time.strftime(air.DATE_FMT)
