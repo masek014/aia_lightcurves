@@ -1,5 +1,5 @@
 import aiapy.calibrate
-import aiapy.calibrate.util
+import aiapy.calibrate.utils
 import astropy.units as u
 import sunpy.map
 import urllib.error
@@ -28,7 +28,7 @@ def level1_to_1p5(
     successful = False
     while not successful and attempt < max_attempts:
         try:
-            pointing_table = aiapy.calibrate.util.get_pointing_table(
+            pointing_table = aiapy.calibrate.utils.get_pointing_table(
                 source='jsoc', time_range=(map_.date - 12 * u.h, map_.date + 12 * u.h))
             map_pointing_corrected = aiapy.calibrate.update_pointing(
                 map_, pointing_table=pointing_table)
@@ -58,3 +58,4 @@ def level1_to_1p5(
 
 
 # ... add the other (optional) calibration functions too?
+
